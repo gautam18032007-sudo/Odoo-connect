@@ -170,8 +170,8 @@ export async function upsertSalesOrders(
 	}
 }
 
-export async function upsertSalesLines(lines: OdooSalesLine[]): Promise<void> {
-	if (lines.length === 0) return;
+export async function upsertSalesLines(lines: OdooSalesLine[]): Promise<number[]> {
+	if (lines.length === 0) return [];
 
 	// Batch the FK-existence check into one query instead of one per line —
 	// cuts Neon round-trips roughly in half, which matters under concurrent
@@ -182,12 +182,11 @@ export async function upsertSalesLines(lines: OdooSalesLine[]): Promise<void> {
 		SELECT id FROM dim_products WHERE id = ANY(${productIds})
 	`;
 	const existingProductIds = new Set(existingRows.map((r) => r.id));
+	const missingProductIds: number[] = [];
 
 	for (const line of lines) {
 		if (!existingProductIds.has(line.productId)) {
-			console.warn(
-				`[odoo.repository] Warning: Skipping line upsert. Product ${line.productId} does not exist in dim_products.`,
-			);
+			missingProductIds.push(line.productId);
 			continue;
 		}
 
@@ -210,6 +209,8 @@ export async function upsertSalesLines(lines: OdooSalesLine[]): Promise<void> {
 				updated_at = NOW()
 		`;
 	}
+
+	return [...new Set(missingProductIds)];
 }
 
 export async function upsertInventory(records: OdooInventory[]): Promise<void> {

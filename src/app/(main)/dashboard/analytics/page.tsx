@@ -20,13 +20,12 @@ import { TrafficQuality } from "./_components/traffic-quality";
 // Import flag icons styling
 import "@/styles/flag-icons/flags.css";
 
+import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
+
 export default function Page() {
 	const router = useRouter();
-	// biome-ignore lint/suspicious/noExplicitAny: Dashboard data from API has dynamic shape
-	const [data, setData] = useState<any>(null);
 	// biome-ignore lint/suspicious/noExplicitAny: Status data from API has dynamic shape
 	const [status, setStatus] = useState<any>(null);
-	const [isLoading, setIsLoading] = useState(true);
 
 	const { startDate, endDate, store, category, brand, sku, categoryScope } =
 		useFilterStore();
@@ -47,35 +46,38 @@ export default function Page() {
 		fetchStatus();
 	}, []);
 
-	useEffect(() => {
-		if (!status?.hasData) return;
+	const fetcher = async (signal: AbortSignal) => {
+		const params = new URLSearchParams({ startDate, endDate });
+		if (store !== "ALL") params.set("store", store);
+		if (category !== "All Categories") params.set("category", category);
+		if (brand !== "All Brands") params.set("brand", brand);
+		if (sku) params.set("sku", sku);
+		if (categoryScope !== "all") params.set("categoryScope", categoryScope);
 
-		const fetchDashboardData = async () => {
-			setIsLoading(true);
-			try {
-				const params = new URLSearchParams({ startDate, endDate });
-				if (store !== "ALL") params.set("store", store);
-				if (category !== "All Categories") params.set("category", category);
-				if (brand !== "All Brands") params.set("brand", brand);
-				if (sku) params.set("sku", sku);
-				if (categoryScope !== "all") params.set("categoryScope", categoryScope);
+		const res = await fetch(`/api/sales/dashboard-extended?${params.toString()}`, {
+			signal,
+		});
+		const json = await res.json();
+		if (json.success) {
+			return json.data;
+		}
+		return null;
+	};
 
-				const res = await fetch(
-					`/api/sales/dashboard-extended?${params.toString()}`,
-				);
-				const json = await res.json();
-				if (json.success) {
-					setData(json.data);
-				}
-			} catch (err) {
-				console.error("Failed to fetch dashboard data", err);
-			} finally {
-				setIsLoading(false);
-			}
-		};
-
-		fetchDashboardData();
-	}, [status, startDate, endDate, store, category, brand, sku, categoryScope]);
+	const { data, isInitialLoading } = useStabilizedDashboard({
+		fetcher,
+		enabled: Boolean(status?.hasData),
+		dependencies: [
+			status?.hasData,
+			startDate,
+			endDate,
+			store,
+			category,
+			brand,
+			sku,
+			categoryScope,
+		],
+	});
 
 	if (!status) {
 		return (
@@ -116,7 +118,7 @@ export default function Page() {
 			<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 				<div className="flex flex-col gap-1">
 					<h1 className="text-3xl leading-none tracking-tight font-bold">
-						Analytics
+						Traffic & Analytics
 					</h1>
 					<p className="text-muted-foreground text-sm">{formattedDate}</p>
 				</div>
@@ -137,7 +139,7 @@ export default function Page() {
 				availableBrands={status.availableBrands || []}
 			/>
 
-			{isLoading || !data ? (
+			{!data && isInitialLoading ? (
 				<div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-12 mt-2">
 					<Skeleton className="h-[120px] xl:col-span-12 rounded-xl animate-pulse" />
 					<Skeleton className="h-[250px] xl:col-span-7 rounded-xl animate-pulse" />

@@ -136,47 +136,41 @@ function NetPurchaseSyncBadge() {
 
 // ── Main Dashboard Page ──────────────────────────────────────────────────
 
+import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
+
 export default function NetPurchaseDashboardPage() {
-	const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
-	const [trendData, setTrendData] = useState<TrendPoint[]>([]);
-	const [comparisonData, setComparisonData] = useState<ComparisonData | null>(
-		null,
-	);
-	const [loading, setLoading] = useState(true);
+	const fetcher = async (signal: AbortSignal) => {
+		const [summaryRes, trendRes, comparisonRes] = await Promise.all([
+			fetch("/api/net-purchase/summary", { signal }),
+			fetch("/api/net-purchase/trends", { signal }),
+			fetch("/api/net-purchase/comparison", { signal }),
+		]);
 
-	const fetchData = useCallback(async () => {
-		setLoading(true);
-		try {
-			const [summaryRes, trendRes, comparisonRes] = await Promise.all([
-				fetch("/api/net-purchase/summary"),
-				fetch("/api/net-purchase/trends"),
-				fetch("/api/net-purchase/comparison"),
-			]);
+		const [summaryJson, trendJson, comparisonJson] = await Promise.all([
+			summaryRes.json(),
+			trendRes.json(),
+			comparisonRes.json(),
+		]);
 
-			const [summaryJson, trendJson, comparisonJson] = await Promise.all([
-				summaryRes.json(),
-				trendRes.json(),
-				comparisonRes.json(),
-			]);
+		return {
+			summaryData: summaryJson.success ? summaryJson.data : null,
+			trendData: trendJson.success ? trendJson.data : [],
+			comparisonData: comparisonJson.success ? comparisonJson.data : null,
+		};
+	};
 
-			if (summaryJson.success) setSummaryData(summaryJson.data);
-			if (trendJson.success) setTrendData(trendJson.data);
-			if (comparisonJson.success) setComparisonData(comparisonJson.data);
-		} catch (err) {
-			console.error("Failed to fetch net purchase data:", err);
-		} finally {
-			setLoading(false);
-		}
-	}, []);
+	const { data, isInitialLoading, refetch } = useStabilizedDashboard({
+		fetcher,
+	});
 
-	useEffect(() => {
-		fetchData();
-	}, [fetchData]);
+	const summaryData = data?.summaryData ?? null;
+	const trendData = data?.trendData ?? [];
+	const comparisonData = data?.comparisonData ?? null;
 
-	const hasData = (summaryData?.summary.rowCount ?? 0) > 0;
+	const hasData = (summaryData?.summary?.rowCount ?? 0) > 0;
 
 	// ── Loading State ──────────────────────────────────────────────────
-	if (loading) {
+	if (!summaryData) {
 		return (
 			<div className="flex flex-col gap-6 p-4 pt-4 md:p-8">
 				<div className="flex items-center justify-between">
@@ -411,13 +405,19 @@ export default function NetPurchaseDashboardPage() {
 								{summaryData.byStore.length > 0 ? (
 									<ResponsiveContainer width="100%" height={260}>
 										<BarChart
-											data={summaryData.byStore.map((s) => ({
-												name:
-													s.store?.length > 16
-														? `${s.store.slice(0, 14)}…`
-														: s.store,
-												value: Number(s.net_purchase),
-											}))}
+											data={summaryData.byStore.map(
+												(s: {
+													store: string;
+													net_purchase: number;
+													row_count: number;
+												}) => ({
+													name:
+														s.store?.length > 16
+															? `${s.store.slice(0, 14)}…`
+															: s.store,
+													value: Number(s.net_purchase),
+												}),
+											)}
 											layout="vertical"
 										>
 											<CartesianGrid
@@ -444,7 +444,7 @@ export default function NetPurchaseDashboardPage() {
 												name="Net Purchase"
 												radius={[0, 6, 6, 0]}
 											>
-												{summaryData.byStore.map((s, idx) => (
+												{summaryData.byStore.map((s: { store: string }, idx: number) => (
 													<Cell
 														key={s.store || `store-${idx}`}
 														fill={STORE_COLORS[idx % STORE_COLORS.length]}
@@ -477,9 +477,9 @@ export default function NetPurchaseDashboardPage() {
 							</CardHeader>
 							<CardContent>
 								<div className="space-y-3">
-									{summaryData.byCategory.slice(0, 8).map((cat, idx) => {
+									{summaryData.byCategory.slice(0, 8).map((cat: { category: string; net_purchase: number }, idx: number) => {
 										const maxVal = Math.max(
-											...summaryData.byCategory.map((c) =>
+											...summaryData.byCategory.map((c: { net_purchase: number }) =>
 												Number(c.net_purchase),
 											),
 										);

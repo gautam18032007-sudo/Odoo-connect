@@ -1,38 +1,30 @@
-import { useEffect, useState } from "react";
 import { useFilterStore } from "@/stores/founder/filter-store";
+import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
 
 export function useLTV(hasData: boolean) {
-	const [data, setData] = useState<any>(null);
-	const [isLoading, setIsLoading] = useState(true);
-
 	const { startDate, endDate, store, categoryScope } = useFilterStore();
 
-	useEffect(() => {
-		if (!hasData) return;
+	const fetcher = async (signal: AbortSignal) => {
+		const params = new URLSearchParams({ startDate, endDate });
+		if (store !== "ALL") params.set("store", store);
+		if (categoryScope !== "all") params.set("categoryScope", categoryScope);
 
-		const fetchData = async () => {
-			setIsLoading(true);
-			try {
-				const params = new URLSearchParams({ startDate, endDate });
-				if (store !== "ALL") params.set("store", store);
-				if (categoryScope !== "all") params.set("categoryScope", categoryScope);
+		const res = await fetch(
+			`/api/customer-retention/ltv?${params.toString()}`,
+			{ signal },
+		);
+		const json = await res.json();
+		if (json.success) {
+			return json.data;
+		}
+		return null;
+	};
 
-				const res = await fetch(
-					`/api/customer-retention/ltv?${params.toString()}`,
-				);
-				const json = await res.json();
-				if (json.success) {
-					setData(json.data);
-				}
-			} catch (err) {
-				console.error("Failed to fetch LTV data", err);
-			} finally {
-				setIsLoading(false);
-			}
-		};
+	const { data, isInitialLoading } = useStabilizedDashboard({
+		fetcher,
+		enabled: hasData,
+		dependencies: [hasData, startDate, endDate, store, categoryScope],
+	});
 
-		fetchData();
-	}, [hasData, startDate, endDate, store, categoryScope]);
-
-	return { data, isLoading };
+	return { data, isLoading: !data && isInitialLoading };
 }

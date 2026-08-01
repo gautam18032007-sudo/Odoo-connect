@@ -16,12 +16,12 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFilterStore } from "@/stores/founder/filter-store";
 
+import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
+
 export default function Page() {
 	const router = useRouter();
-	const [data, setData] = useState<any>(null);
 	const [status, setStatus] = useState<any>(null);
 	const [health, setHealth] = useState<any>(null);
-	const [isLoading, setIsLoading] = useState(true);
 
 	const {
 		startDate,
@@ -66,62 +66,56 @@ export default function Page() {
 		fetchHealth();
 	}, []);
 
-	useEffect(() => {
-		if (!status?.hasData) return;
-
-		const fetchDashboardData = async () => {
-			setIsLoading(true);
-			try {
-				const params = new URLSearchParams();
-				if (isDateFiltered) {
-					params.set("startDate", startDate);
-					params.set("endDate", endDate);
-					params.set("compareMode", compareMode);
-					if (compareMode === "custom") {
-						params.set("compareStartDate", compareStartDate);
-						params.set("compareEndDate", compareEndDate);
-					}
-				}
-				if (store !== "ALL") params.set("store", store);
-				if (category !== "All Categories") params.set("category", category);
-				if (brand !== "All Brands") params.set("brand", brand);
-				if (sku) params.set("sku", sku);
-				if (categoryScope !== "all") params.set("categoryScope", categoryScope);
-
-				const res = await fetch(
-					`/api/sales/store-overview?${params.toString()}`,
-				);
-				const json = await res.json();
-				if (json.success) {
-					setData(json.data);
-				}
-			} catch (err) {
-				console.error("Failed to fetch dashboard data", err);
-			} finally {
-				setIsLoading(false);
+	const fetcher = async (signal: AbortSignal) => {
+		const params = new URLSearchParams();
+		if (isDateFiltered) {
+			params.set("startDate", startDate);
+			params.set("endDate", endDate);
+			params.set("compareMode", compareMode);
+			if (compareMode === "custom") {
+				params.set("compareStartDate", compareStartDate);
+				params.set("compareEndDate", compareEndDate);
 			}
-		};
+		}
+		if (store !== "ALL") params.set("store", store);
+		if (category !== "All Categories") params.set("category", category);
+		if (brand !== "All Brands") params.set("brand", brand);
+		if (sku) params.set("sku", sku);
+		if (categoryScope !== "all") params.set("categoryScope", categoryScope);
 
-		fetchDashboardData();
-	}, [
-		status,
-		startDate,
-		endDate,
-		isDateFiltered,
-		store,
-		category,
-		brand,
-		sku,
-		categoryScope,
-		compareMode,
-		compareStartDate,
-		compareEndDate,
-	]);
+		const res = await fetch(`/api/sales/store-overview?${params.toString()}`, {
+			signal,
+		});
+		const json = await res.json();
+		if (json.success) {
+			return json.data;
+		}
+		return null;
+	};
+
+	const { data, isInitialLoading } = useStabilizedDashboard({
+		fetcher,
+		enabled: Boolean(status?.hasData),
+		dependencies: [
+			status?.hasData,
+			startDate,
+			endDate,
+			isDateFiltered,
+			store,
+			category,
+			brand,
+			sku,
+			categoryScope,
+			compareMode,
+			compareStartDate,
+			compareEndDate,
+		],
+	});
 
 	if (!status) {
 		return (
 			<div className="p-8">
-				<Skeleton className="h-[400px] w-full animate-pulse" />
+				<Skeleton className="h-[400px] w-full" />
 			</div>
 		);
 	}
@@ -133,10 +127,10 @@ export default function Page() {
 					<BarChart3 className="size-20 text-muted-foreground" />
 				</div>
 				<div className="max-w-md space-y-2">
-					<h2 className="text-2xl font-bold">Welcome to ZenZebra</h2>
+					<h2 className="text-2xl font-bold">Store Command Center</h2>
 					<p className="text-muted-foreground">
-						No data has been uploaded yet. Upload your first daily sales sheet
-						to unlock insights.
+						No data has been uploaded yet. Upload your sales data to unlock
+						per-store revenue, AOV, bill cuts, and forecast insights.
 					</p>
 				</div>
 				<Button
@@ -152,7 +146,7 @@ export default function Page() {
 
 	const formattedDate = format(new Date(), "EEEE, do MMMM yyyy");
 
-	if (isLoading || !data) {
+	if (!data && isInitialLoading) {
 		return (
 			<div className="flex flex-col gap-4 p-4 md:p-8 pt-4">
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

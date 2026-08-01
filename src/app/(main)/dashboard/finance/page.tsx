@@ -32,32 +32,25 @@ import {
 } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/utils";
 
+import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
+
 export default function FinancePage() {
-	const [data, setData] = useState<any>(null);
-	const [isLoading, setIsLoading] = useState(true);
-
-	const fetchFinanceData = useCallback(async () => {
-		setIsLoading(true);
-		try {
-			const res = await fetch("/api/finance/summary");
-			const json = await res.json();
-			if (json.success) {
-				setData(json.data);
-			}
-		} catch (err) {
-			console.error("Failed to fetch finance summary", err);
-		} finally {
-			setIsLoading(false);
+	const fetcher = async (signal: AbortSignal) => {
+		const res = await fetch("/api/finance/summary", { signal });
+		const json = await res.json();
+		if (json.success) {
+			return json.data;
 		}
-	}, []);
+		return null;
+	};
 
-	useEffect(() => {
-		fetchFinanceData();
-	}, [fetchFinanceData]);
+	const { data, isInitialLoading, refetch } = useStabilizedDashboard({
+		fetcher,
+	});
 
 	const formattedDate = format(new Date(), "EEEE, do MMMM yyyy");
 
-	if (isLoading || !data) {
+	if (!data && isInitialLoading) {
 		return (
 			<div className="flex flex-col gap-6 p-4 md:p-8 pt-4">
 				<Skeleton className="h-14 w-full rounded-xl" />
@@ -96,7 +89,7 @@ export default function FinancePage() {
 				</div>
 
 				<div className="flex items-center gap-3">
-					<Button variant="outline" size="sm" onClick={fetchFinanceData}>
+					<Button variant="outline" size="sm" onClick={() => refetch()}>
 						<RefreshCw className="mr-2 size-4" />
 						Refresh Financials
 					</Button>

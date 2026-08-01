@@ -2,7 +2,7 @@
 
 import { format } from "date-fns";
 import { AlertCircle, Calendar, Clock, Database, RefreshCw, Zap } from "lucide-react";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -35,7 +35,7 @@ interface SyncStatusData {
 	>;
 }
 
-export function DataFreshnessSystem() {
+export const DataFreshnessSystem = memo(function DataFreshnessSystem() {
 	const [data, setData] = useState<SyncStatusData | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -191,4 +191,4 @@ export function DataFreshnessSystem() {
 			</SheetContent>
 		</Sheet>
 	);
-}
+});

@@ -32,11 +32,11 @@ interface StatusData {
 	availableBrands?: string[];
 }
 
+import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
+
 export default function Page() {
 	const router = useRouter();
-	const [data, setData] = useState<CustomerIntelligenceData | null>(null);
 	const [status, setStatus] = useState<StatusData | null>(null);
-	const [isLoading, setIsLoading] = useState(true);
 
 	const {
 		startDate,
@@ -65,59 +65,55 @@ export default function Page() {
 		fetchStatus();
 	}, []);
 
-	useEffect(() => {
-		if (!status?.hasData) return;
-
-		const fetchData = async () => {
-			setIsLoading(true);
-			try {
-				const params = new URLSearchParams();
-				if (isDateFiltered) {
-					params.set("startDate", startDate);
-					params.set("endDate", endDate);
-					params.set("compareMode", compareMode);
-					if (compareMode === "custom") {
-						params.set("compareStartDate", compareStartDate);
-						params.set("compareEndDate", compareEndDate);
-					}
-				}
-				if (store !== "ALL") params.set("store", store);
-				if (category !== "All Categories") params.set("category", category);
-				if (brand !== "All Brands") params.set("brand", brand);
-				if (sku) params.set("sku", sku);
-				if (categoryScope !== "all") params.set("categoryScope", categoryScope);
-
-				const res = await fetch(
-					`/api/customer-intelligence?${params.toString()}`,
-				);
-				if (res.status === 401) {
-					window.location.href = "/login";
-					return;
-				}
-				const json: CustomerIntelligenceResponse = await res.json();
-				if (json.success && json.data) setData(json.data);
-			} catch (err) {
-				console.error("Failed to fetch customer intelligence data", err);
-			} finally {
-				setIsLoading(false);
+	const fetcher = async (signal: AbortSignal) => {
+		const params = new URLSearchParams();
+		if (isDateFiltered) {
+			params.set("startDate", startDate);
+			params.set("endDate", endDate);
+			params.set("compareMode", compareMode);
+			if (compareMode === "custom") {
+				params.set("compareStartDate", compareStartDate);
+				params.set("compareEndDate", compareEndDate);
 			}
-		};
+		}
+		if (store !== "ALL") params.set("store", store);
+		if (category !== "All Categories") params.set("category", category);
+		if (brand !== "All Brands") params.set("brand", brand);
+		if (sku) params.set("sku", sku);
+		if (categoryScope !== "all") params.set("categoryScope", categoryScope);
 
-		fetchData();
-	}, [
-		status,
-		startDate,
-		endDate,
-		isDateFiltered,
-		store,
-		category,
-		brand,
-		sku,
-		categoryScope,
-		compareMode,
-		compareStartDate,
-		compareEndDate,
-	]);
+		const res = await fetch(`/api/customer-intelligence?${params.toString()}`, {
+			signal,
+		});
+		if (res.status === 401) {
+			window.location.href = "/login";
+			return null;
+		}
+		const json: CustomerIntelligenceResponse = await res.json();
+		if (json.success && json.data) {
+			return json.data;
+		}
+		return null;
+	};
+
+	const { data, isInitialLoading, isRefreshing } = useStabilizedDashboard({
+		fetcher,
+		enabled: Boolean(status?.hasData),
+		dependencies: [
+			status?.hasData,
+			startDate,
+			endDate,
+			isDateFiltered,
+			store,
+			category,
+			brand,
+			sku,
+			categoryScope,
+			compareMode,
+			compareStartDate,
+			compareEndDate,
+		],
+	});
 
 	if (!status) {
 		return (
@@ -187,7 +183,7 @@ export default function Page() {
 						<Button
 							variant="outline"
 							onClick={handleExport}
-							disabled={!data || isLoading}
+							disabled={!data}
 							className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 transition-all"
 						>
 							<FileSpreadsheet className="mr-2 size-4" />
@@ -208,7 +204,7 @@ export default function Page() {
 					availableBrands={status.availableBrands || []}
 				/>
 
-				{isLoading || !data ? (
+				{!data ? (
 					<div className="mt-2 grid grid-cols-12 gap-6">
 						<Skeleton className="col-span-12 h-[360px] rounded-xl xl:col-span-4" />
 						<Skeleton className="col-span-12 h-[360px] rounded-xl xl:col-span-8" />

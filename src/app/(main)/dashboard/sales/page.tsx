@@ -266,12 +266,11 @@ function RootCauseCard({
 	);
 }
 
+import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
+
 export default function SalesDashboardPage() {
 	const router = useRouter();
-	const [data, setData] = useState<any>(null);
 	const [status, setStatus] = useState<any>(null);
-	const [isLoading, setIsLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
 
 	const {
 		startDate,
@@ -306,69 +305,60 @@ export default function SalesDashboardPage() {
 		fetchStatus();
 	}, [setDataBounds]);
 
-	useEffect(() => {
-		if (!status?.hasData) return;
+	const fetcher = async (signal: AbortSignal) => {
+		const params = new URLSearchParams({ startDate, endDate });
+		if (store !== "ALL") params.set("store", store);
+		if (category !== "All Categories") params.set("category", category);
+		if (brand !== "All Brands") params.set("brand", brand);
+		if (sku) params.set("sku", sku);
+		if (categoryScope !== "all") params.set("categoryScope", categoryScope);
+		params.set("compareMode", compareMode);
+		if (compareMode === "custom") {
+			params.set("compareStartDate", compareStartDate);
+			params.set("compareEndDate", compareEndDate);
+		}
 
-		const fetchDashboardData = async () => {
-			setIsLoading(true);
-			setError(null);
-			try {
-				const params = new URLSearchParams({ startDate, endDate });
-				if (store !== "ALL") params.set("store", store);
-				if (category !== "All Categories") params.set("category", category);
-				if (brand !== "All Brands") params.set("brand", brand);
-				if (sku) params.set("sku", sku);
-				if (categoryScope !== "all") params.set("categoryScope", categoryScope);
-				params.set("compareMode", compareMode);
-				if (compareMode === "custom") {
-					params.set("compareStartDate", compareStartDate);
-					params.set("compareEndDate", compareEndDate);
-				}
+		const res = await fetch(`/api/sales/dashboard?${params.toString()}`, {
+			cache: "no-store",
+			signal,
+		});
+		if (res.status === 401) {
+			window.location.href = "/login";
+			return null;
+		}
+		const json = await res.json();
+		if (json.success) {
+			return json.data;
+		} else if (
+			json.error === "Unauthorized" ||
+			json.message === "Unauthorized"
+		) {
+			window.location.href = "/login";
+			return null;
+		} else {
+			throw new Error(json.error ?? "Failed to load dashboard data.");
+		}
+	};
 
-				const res = await fetch(`/api/sales/dashboard?${params.toString()}`, { cache: "no-store" });
-				if (res.status === 401) {
-					window.location.href = "/login";
-					return;
-				}
-				const json = await res.json();
-				if (json.success) {
-					setData(json.data);
-				} else if (
-					json.error === "Unauthorized" ||
-					json.message === "Unauthorized"
-				) {
-					window.location.href = "/login";
-					return;
-				} else {
-					console.error("Dashboard API returned an error", json.error);
-					setError(json.error ?? "Failed to load dashboard data.");
-				}
-			} catch (err) {
-				console.error("Failed to fetch dashboard data", err);
-				setError(
-					err instanceof Error ? err.message : "Failed to load dashboard data.",
-				);
-			} finally {
-				setIsLoading(false);
-			}
-		};
-
-		fetchDashboardData();
-		const interval = setInterval(fetchDashboardData, 10000);
-		return () => clearInterval(interval);
-	}, [
-		status,
-		startDate,
-		endDate,
-		store,
-		category,
-		brand,
-		sku,
-		categoryScope,
-		compareMode,
-		compareStartDate,
-		compareEndDate,
-	]);
+	const { data, isInitialLoading, isRefreshing, error, refetch } =
+		useStabilizedDashboard({
+			fetcher,
+			enabled: Boolean(status?.hasData),
+			refreshInterval: 10000,
+			dependencies: [
+				status?.hasData,
+				startDate,
+				endDate,
+				store,
+				category,
+				brand,
+				sku,
+				categoryScope,
+				compareMode,
+				compareStartDate,
+				compareEndDate,
+			],
+		});
 
 	if (!status) {
 		return (
@@ -441,14 +431,12 @@ export default function SalesDashboardPage() {
 					</div>
 					<Button
 						variant="outline"
-						onClick={() => {
-							setStatus((prev: any) => (prev ? { ...prev } : prev));
-						}}
+						onClick={() => refetch()}
 					>
 						Retry
 					</Button>
 				</div>
-			) : isLoading || !data ? (
+			) : !data && isInitialLoading ? (
 				<div className="space-y-4">
 					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
 						{["revenue", "bill-cuts", "units", "aov", "discount"].map((key) => (

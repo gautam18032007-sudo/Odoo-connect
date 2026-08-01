@@ -1,12 +1,69 @@
 import {
+	type OdooProduct,
 	type OdooSalesLine,
 	type OdooSalesOrder,
 	type OdooStore,
+	upsertProducts,
 	upsertSalesLines,
 	upsertSalesOrders,
 	upsertStores,
 } from "../../repositories/odoo.repository";
 import { formatDateTimeForOdoo, type OdooClient } from "../client";
+
+async function fetchAndUpsertMissingProducts(
+	client: OdooClient,
+	productIds: number[],
+) {
+	if (productIds.length === 0) return;
+	console.log(
+		`[syncSales] Auto-recovering ${productIds.length} missing products from Odoo API:`,
+		productIds,
+	);
+	try {
+		const records = await client.callKw<any[]>(
+			"product.product",
+			"search_read",
+			[],
+			{
+				domain: [["id", "in", productIds]],
+				fields: [
+					"id",
+					"name",
+					"default_code",
+					"barcode",
+					"list_price",
+					"standard_price",
+					"qty_available",
+					"free_qty",
+					"active",
+					"categ_id",
+				],
+			},
+		);
+		if (records && records.length > 0) {
+			const productsToUpsert: OdooProduct[] = records.map((rec: any) => ({
+				id: Number(rec.id),
+				name: String(rec.name),
+				defaultCode: rec.default_code ? String(rec.default_code) : undefined,
+				barcode: rec.barcode ? String(rec.barcode) : undefined,
+				listPrice: rec.list_price ? Number(rec.list_price) : 0,
+				costPrice: rec.standard_price ? Number(rec.standard_price) : 0,
+				qtyAvailable: rec.qty_available ? Number(rec.qty_available) : 0,
+				freeQty: rec.free_qty ? Number(rec.free_qty) : 0,
+				active: Boolean(rec.active !== false),
+				category: Array.isArray(rec.categ_id)
+					? String(rec.categ_id[1])
+					: undefined,
+			}));
+			await upsertProducts(productsToUpsert);
+		}
+	} catch (err: any) {
+		console.error(
+			"[syncSales] Failed to auto-recover missing products:",
+			err.message,
+		);
+	}
+}
 
 /**
  * Synchronizes Odoo stores (pos.config), Sales Orders (sale.order),
@@ -224,7 +281,11 @@ async function syncStandardSales(
 				};
 			});
 
-			await upsertSalesLines(salesLines);
+			let missingProductIds = await upsertSalesLines(salesLines);
+			if (missingProductIds.length > 0) {
+				await fetchAndUpsertMissingProducts(client, missingProductIds);
+				await upsertSalesLines(salesLines);
+			}
 		}
 
 		orderCount += salesOrders.length;
@@ -367,7 +428,11 @@ async function syncPosSales(
 				};
 			});
 
-			await upsertSalesLines(salesLines);
+			let missingProductIds = await upsertSalesLines(salesLines);
+			if (missingProductIds.length > 0) {
+				await fetchAndUpsertMissingProducts(client, missingProductIds);
+				await upsertSalesLines(salesLines);
+			}
 		}
 
 		orderCount += posOrders.length;

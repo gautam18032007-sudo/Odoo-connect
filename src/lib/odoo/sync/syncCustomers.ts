@@ -21,7 +21,6 @@ export async function syncCustomers(
 		"name",
 		"email",
 		"phone",
-		"mobile",
 		"city",
 		"customer_rank",
 		"active",

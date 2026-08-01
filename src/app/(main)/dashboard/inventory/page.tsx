@@ -112,39 +112,27 @@ interface InventoryDashboardData {
 	};
 }
 
+import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
+
 export default function ExecutiveInventoryDashboardPage() {
-	const [data, setData] = useState<InventoryDashboardData | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
-	const [refreshing, setRefreshing] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 
-	const fetchDashboard = async () => {
-		try {
-			setRefreshing(true);
-			const res = await fetch("/api/inventory/dashboard");
-			const json = await res.json();
-			if (json.success) {
-				setData(json.data);
-				setError(null);
-			} else {
-				setError(json.error || "Failed to load inventory metrics");
-			}
-		} catch (err: any) {
-			setError(err.message || "Network error loading inventory metrics");
-		} finally {
-			setLoading(false);
-			setRefreshing(false);
+	const fetcher = async (signal: AbortSignal) => {
+		const res = await fetch("/api/inventory/dashboard", { signal });
+		const json = await res.json();
+		if (json.success) {
+			return json.data;
 		}
+		throw new Error(json.error || "Failed to load inventory metrics");
 	};
 
-	useEffect(() => {
-		fetchDashboard();
-		const interval = setInterval(fetchDashboard, 5000);
-		return () => clearInterval(interval);
-	}, []);
+	const { data, isInitialLoading, isRefreshing, error, refetch } =
+		useStabilizedDashboard<InventoryDashboardData>({
+			fetcher,
+			refreshInterval: 5000,
+		});
 
-	if (loading) {
+	if (isInitialLoading && !data) {
 		return (
 			<div className="flex flex-col gap-6 p-4 pt-4 md:p-8">
 				<div className="flex items-center justify-between">
@@ -161,16 +149,18 @@ export default function ExecutiveInventoryDashboardPage() {
 		);
 	}
 
-	if (error || !data) {
+	if (error && !data) {
 		return (
 			<div className="flex flex-col items-center justify-center min-h-[60vh] p-4 text-center space-y-4">
 				<AlertCircle className="size-16 text-destructive" />
 				<h2 className="text-xl font-bold">Failed to load Inventory Dashboard</h2>
 				<p className="text-muted-foreground text-sm max-w-md">{error}</p>
-				<Button onClick={fetchDashboard}>Retry Connection</Button>
+				<Button onClick={() => refetch()}>Retry Connection</Button>
 			</div>
 		);
 	}
+
+	if (!data) return null;
 
 	const { overview, storeBreakdown, fastMoving, slowMoving, reorderRecommendations, stockAging, performance } = data;
 
@@ -214,11 +204,11 @@ export default function ExecutiveInventoryDashboardPage() {
 					<Button
 						variant="outline"
 						size="sm"
-						onClick={fetchDashboard}
-						disabled={refreshing}
+						onClick={() => refetch()}
+						disabled={isRefreshing}
 						className="gap-2 shadow-sm"
 					>
-						<RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+						<RefreshCw className={`size-4 ${isRefreshing ? "animate-spin" : ""}`} />
 						Refresh
 					</Button>
 				</div>

@@ -1,30 +1,28 @@
-import * as dotenv from "dotenv";
+import * as fs from "fs";
 import * as path from "path";
 
-dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
-
-/**
- * Updates the LIVE sales_fact_v compatibility view (originally deployed by
- * deploy-compatibility-view.ts) to read real category/tax data instead of
- * the hardcoded 'General'/0.00 placeholders — see docs/odoo_migration_gap_assessment.md
- * and docs/TECH_DEBT.md (TD-002 covers what's still a genuine placeholder:
- * brand and payment_method, neither of which has an Odoo-side source yet).
- *
- * Everything else in this view (Part A / Excel, store-code CASE expressions,
- * join structure) is unchanged from the live deployed version.
- */
-async function main() {
-	if (!process.env.DATABASE_URL) {
-		console.error("❌ DATABASE_URL is not set.");
-		process.exit(1);
+// Load .env.local
+const envPath = path.resolve(process.cwd(), ".env.local");
+if (fs.existsSync(envPath)) {
+	const envConfig = fs.readFileSync(envPath, "utf8");
+	for (const line of envConfig.split("\n")) {
+		const trimmed = line.trim();
+		if (trimmed && !trimmed.startsWith("#") && trimmed.includes("=")) {
+			const [key, ...valueParts] = trimmed.split("=");
+			const value = valueParts.join("=").replace(/^["']|["']$/g, "");
+			if (key && !process.env[key.trim()]) {
+				process.env[key.trim()] = value;
+			}
+		}
 	}
+}
 
+async function main() {
 	const { sql } = await import("../lib/db");
 
-	console.log(
-		"Updating sales_fact_v: category (from dim_products.category) and tax_amount (from fact_sales_lines.tax_amount)...",
-	);
+	console.log("=== TESTING VIEW SALE_DATE WITH AT TIME ZONE 'Asia/Kolkata' ===");
 
+	// First let's update sales_fact_v view to use (fo.date_order AT TIME ZONE 'Asia/Kolkata')::date
 	await sql`
 		CREATE OR REPLACE VIEW sales_fact_v AS
 		-- Part A: Legacy Excel Upload Data
@@ -53,7 +51,7 @@ async function main() {
 			fl.id AS id,
 			999999 AS upload_id, -- Reserved Odoo identifier
 			fo.name AS bill_no,
-			(fo.date_order AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date AS sale_date,
+			(fo.date_order AT TIME ZONE 'Asia/Kolkata')::date AS sale_date,
 			CASE
 				WHEN ds.code = 'KLJ' THEN 'Klj store'
 				WHEN ds.code = 'SWN' THEN 'SmartworksNoida Noida'
@@ -85,12 +83,24 @@ async function main() {
 		LEFT JOIN dim_stores ds ON fo.store_id = ds.id;
 	`;
 
-	console.log(
-		"✅ sales_fact_v updated: real category + tax_amount for Odoo-sourced rows.",
-	);
+	console.log("View sales_fact_v updated with (fo.date_order AT TIME ZONE 'Asia/Kolkata')::date!");
+
+	// Query sales_fact_v for sale_date = '2026-07-31'
+	const viewRes = await sql`
+		SELECT 
+			COUNT(*)::int as line_count,
+			COUNT(DISTINCT bill_no)::int as bill_cuts,
+			SUM(gross_amount)::numeric(12,2) as collection,
+			SUM(net_amount)::numeric(12,2) as net_revenue,
+			SUM(discount_amount)::numeric(12,2) as discount,
+			SUM(tax_amount)::numeric(12,2) as gst,
+			SUM(quantity)::int as units
+		FROM sales_fact_v
+		WHERE sale_date = '2026-07-31'::date
+	`;
+
+	console.log("\nsales_fact_v query results for 31 Jul 2026:");
+	console.table(viewRes);
 }
 
-main().catch((err) => {
-	console.error("❌ View update failed:", err.message || err);
-	process.exit(1);
-});
+main().catch(console.error);

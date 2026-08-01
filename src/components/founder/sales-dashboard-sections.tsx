@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { formatStoreName } from "@/components/founder/global-filter-bar";
 import { Button } from "@/components/ui/button";
 import {
@@ -67,18 +67,16 @@ function DatasetExportButton<T>({
 	columns: ExportColumn<T>[];
 	sortBy: (row: T) => number;
 }) {
-	const {
-		startDate: globalStartDate,
-		endDate: globalEndDate,
-		store: globalStore,
-		category,
-		brand,
-		sku,
-		categoryScope,
-		compareMode,
-		compareStartDate,
-		compareEndDate,
-	} = useFilterStore();
+	const globalStartDate = useFilterStore((state) => state.startDate);
+	const globalEndDate = useFilterStore((state) => state.endDate);
+	const globalStore = useFilterStore((state) => state.store);
+	const category = useFilterStore((state) => state.category);
+	const brand = useFilterStore((state) => state.brand);
+	const sku = useFilterStore((state) => state.sku);
+	const categoryScope = useFilterStore((state) => state.categoryScope);
+	const compareMode = useFilterStore((state) => state.compareMode);
+	const compareStartDate = useFilterStore((state) => state.compareStartDate);
+	const compareEndDate = useFilterStore((state) => state.compareEndDate);
 
 	const [open, setOpen] = useState(false);
 	const [store, setStore] = useState(globalStore);
@@ -276,7 +274,7 @@ function ExportButton({
 	);
 }
 
-export function DailyHealthTable({
+export const DailyHealthTable = memo(function DailyHealthTable({
 	metrics,
 	comparisonLabel,
 }: {
@@ -367,9 +365,9 @@ export function DailyHealthTable({
 			</CardContent>
 		</Card>
 	);
-}
+});
 
-export function BrandPerformanceTable({
+export const BrandPerformanceTable = memo(function BrandPerformanceTable({
 	data,
 	comparisonLabel,
 }: {
@@ -449,9 +447,9 @@ export function BrandPerformanceTable({
 			</CardContent>
 		</Card>
 	);
-}
+});
 
-export function SkuPerformanceTable({
+export const SkuPerformanceTable = memo(function SkuPerformanceTable({
 	data,
 	comparisonLabel,
 }: {
@@ -538,9 +536,9 @@ export function SkuPerformanceTable({
 			</CardContent>
 		</Card>
 	);
-}
+});
 
-export function BillCutAnalysisTable({
+export const BillCutAnalysisTable = memo(function BillCutAnalysisTable({
 	data,
 	comparisonLabel,
 }: {
@@ -613,9 +611,9 @@ export function BillCutAnalysisTable({
 			</CardContent>
 		</Card>
 	);
-}
+});
 
-export function AovAnalysisTable({
+export const AovAnalysisTable = memo(function AovAnalysisTable({
 	data,
 	comparisonLabel,
 }: {
@@ -688,9 +686,9 @@ export function AovAnalysisTable({
 			</CardContent>
 		</Card>
 	);
-}
+});
 
-export function CustomerIntelligenceCard({
+export const CustomerIntelligenceCard = memo(function CustomerIntelligenceCard({
 	data,
 	comparisonLabel,
 }: {
@@ -792,9 +790,9 @@ export function CustomerIntelligenceCard({
 			</CardContent>
 		</Card>
 	);
-}
+});
 
-export function PaymentAnalysisCard({
+export const PaymentAnalysisCard = memo(function PaymentAnalysisCard({
 	data,
 	comparisonLabel,
 }: {
@@ -874,4 +872,4 @@ export function PaymentAnalysisCard({
 			</CardContent>
 		</Card>
 	);
-}
+});

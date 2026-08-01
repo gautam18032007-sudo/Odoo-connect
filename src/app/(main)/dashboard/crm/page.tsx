@@ -18,12 +18,12 @@ import { PipelineActivity } from "./_components/pipeline-activity";
 import { PipelineKanbanBoard } from "./_components/pipeline-kanban-board";
 import { TaskReminders } from "./_components/task-reminders";
 
+import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
+
 export default function Page() {
 	const router = useRouter();
-	const [data, setData] = useState<any>(null);
 	const [crmData, setCrmData] = useState<any>(null);
 	const [status, setStatus] = useState<any>(null);
-	const [isLoading, setIsLoading] = useState(true);
 	const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
 
 	const { startDate, endDate, store, category, brand, sku, categoryScope } =
@@ -56,39 +56,43 @@ export default function Page() {
 		}
 	}, [store]);
 
-	const fetchDashboardData = useCallback(async () => {
-		setIsLoading(true);
-		try {
-			const params = new URLSearchParams({ startDate, endDate });
-			if (store !== "ALL") params.set("store", store);
-			if (category !== "All Categories") params.set("category", category);
-			if (brand !== "All Brands") params.set("brand", brand);
-			if (sku) params.set("sku", sku);
-			if (categoryScope !== "all") params.set("categoryScope", categoryScope);
-
-			const res = await fetch(`/api/sales/dashboard-extended?${params.toString()}`);
-			const json = await res.json();
-			if (json.success) {
-				setData(json.data);
-			}
-		} catch (err) {
-			console.error("Failed to fetch dashboard data", err);
-		} finally {
-			setIsLoading(false);
-		}
-	}, [startDate, endDate, store, category, brand, sku, categoryScope]);
-
 	useEffect(() => {
 		fetchStatus();
 		fetchCrmPipeline();
 	}, [fetchStatus, fetchCrmPipeline]);
 
-	useEffect(() => {
-		if (status?.hasData) {
-			fetchDashboardData();
-			fetchCrmPipeline();
+	const fetcher = async (signal: AbortSignal) => {
+		const params = new URLSearchParams({ startDate, endDate });
+		if (store !== "ALL") params.set("store", store);
+		if (category !== "All Categories") params.set("category", category);
+		if (brand !== "All Brands") params.set("brand", brand);
+		if (sku) params.set("sku", sku);
+		if (categoryScope !== "all") params.set("categoryScope", categoryScope);
+
+		const res = await fetch(`/api/sales/dashboard-extended?${params.toString()}`, {
+			signal,
+		});
+		const json = await res.json();
+		if (json.success) {
+			return json.data;
 		}
-	}, [status, fetchDashboardData, fetchCrmPipeline]);
+		return null;
+	};
+
+	const { data, isInitialLoading } = useStabilizedDashboard({
+		fetcher,
+		enabled: Boolean(status?.hasData),
+		dependencies: [
+			status?.hasData,
+			startDate,
+			endDate,
+			store,
+			category,
+			brand,
+			sku,
+			categoryScope,
+		],
+	});
 
 	const handleStageChange = async (leadId: number | string, newStage: string) => {
 		try {
@@ -192,7 +196,7 @@ export default function Page() {
 				availableBrands={status.availableBrands || []}
 			/>
 
-			{isLoading || !data ? (
+			{!data && isInitialLoading ? (
 				<div className="grid gap-6 grid-cols-1 mt-2">
 					<Skeleton className="h-[120px] rounded-xl" />
 					<Skeleton className="h-[300px] rounded-xl" />

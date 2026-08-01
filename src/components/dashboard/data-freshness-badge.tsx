@@ -2,7 +2,7 @@
 
 import { format } from "date-fns";
 import { CheckCircle2, TriangleAlert } from "lucide-react";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 
 interface FreshnessData {
 	latestSaleDate: string | null;
@@ -16,7 +16,7 @@ interface FreshnessData {
  * Compact data-freshness header chip: last upload, row count, and a Fresh/stale
  * status. Presentation only — reads /api/data-freshness. Reusable on any dashboard.
  */
-export function DataFreshnessBadge() {
+export const DataFreshnessBadge = memo(function DataFreshnessBadge() {
 	const [data, setData] = useState<FreshnessData | null>(null);
 
 	useEffect(() => {
@@ -68,4 +68,4 @@ export function DataFreshnessBadge() {
 			</span>
 		</div>
 	);
-}
+});
