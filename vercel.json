@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/odoo-sync",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron",
+      "schedule": "* * * * *"
     }
   ]
 }
