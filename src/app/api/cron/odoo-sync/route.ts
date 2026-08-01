@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
+	console.log("[ODOO_CRON_REGISTERED]", new Date().toISOString());
 	console.log(
 		"[ODOO_CRON] Starting 1-minute scheduled incremental backup sync...",
 	);
