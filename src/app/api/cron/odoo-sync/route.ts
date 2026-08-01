@@ -5,8 +5,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/cron/sync
- * Legacy/Alternative cron route for background Odoo synchronization.
+ * GET /api/cron/odoo-sync
+ * Scheduled 1-minute Cron backup sync for Odoo 19 SaaS.
+ * Fetches incremental record changes (write_date >= last_sync_time) as a fail-safe backup for webhooks.
  */
 export async function GET(req: NextRequest) {
 	const startTime = Date.now();
@@ -20,28 +21,35 @@ export async function GET(req: NextRequest) {
 	const providedSecret = bearerToken || querySecret;
 	const expectedSecret = process.env.CRON_SECRET;
 
+	// Authenticate if CRON_SECRET is configured
 	if (expectedSecret && providedSecret !== expectedSecret) {
 		console.warn("[ODOO_CRON] Rejected unauthorized cron trigger attempt");
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
-	console.log("[ODOO_CRON] Triggering scheduled Odoo sync pipeline...");
+	console.log(
+		"[ODOO_CRON] Starting 1-minute scheduled incremental backup sync...",
+	);
 
 	try {
 		await runSyncPipeline();
 		const durationMs = Date.now() - startTime;
 		const durationSec = (durationMs / 1000).toFixed(1);
 
+		console.log(
+			`[ODOO_CRON] Successfully completed backup sync in ${durationSec}s`,
+		);
+
 		return NextResponse.json({
 			success: true,
 			timestamp: new Date().toISOString(),
 			duration: `${durationSec}s`,
 			durationMs,
-			message: "Sync pipeline executed successfully.",
+			message: "Odoo backup sync completed successfully.",
 		});
 	} catch (error: any) {
 		const durationMs = Date.now() - startTime;
-		console.error("[ODOO_CRON] Sync failed:", error.message);
+		console.error("[ODOO_CRON] Backup sync failed:", error.message);
 		return NextResponse.json(
 			{
 				success: false,
