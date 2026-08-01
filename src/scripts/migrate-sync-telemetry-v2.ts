@@ -1,6 +1,6 @@
+import path from "node:path";
 import { neon } from "@neondatabase/serverless";
 import * as dotenv from "dotenv";
-import path from "path";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
@@ -12,7 +12,9 @@ async function migrate() {
 	}
 
 	const sql = neon(process.env.DATABASE_URL);
-	console.log("Migrating sync_telemetry for Phase 3 Trace IDs & Production Observability...");
+	console.log(
+		"Migrating sync_telemetry for Phase 3 Trace IDs & Production Observability...",
+	);
 
 	await sql`
 		ALTER TABLE sync_telemetry 

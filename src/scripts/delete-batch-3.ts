@@ -1,5 +1,5 @@
+import * as path from "node:path";
 import * as dotenv from "dotenv";
-import * as path from "path";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
@@ -17,7 +17,7 @@ async function main() {
 
 	try {
 		// Cascades delete to sales_fact table automatically
-		const res = await sql`DELETE FROM upload_batches WHERE id = 3`;
+		const _res = await sql`DELETE FROM upload_batches WHERE id = 3`;
 		console.log(
 			"✅ Batch 3 deleted successfully from upload_batches and sales_fact!",
 		);

@@ -3,28 +3,17 @@
 import {
 	Activity,
 	AlertCircle,
-	AlertTriangle,
-	ArrowUpRight,
-	BarChart3,
 	Boxes,
 	CheckCircle2,
 	Clock,
-	DollarSign,
-	Download,
-	Filter,
 	IndianRupee,
-	Layers,
-	Package,
 	RefreshCw,
 	Search,
-	ShieldAlert,
-	ShoppingBag,
 	Store,
-	TrendingDown,
 	TrendingUp,
 	Zap,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -153,7 +142,9 @@ export default function ExecutiveInventoryDashboardPage() {
 		return (
 			<div className="flex flex-col items-center justify-center min-h-[60vh] p-4 text-center space-y-4">
 				<AlertCircle className="size-16 text-destructive" />
-				<h2 className="text-xl font-bold">Failed to load Inventory Dashboard</h2>
+				<h2 className="text-xl font-bold">
+					Failed to load Inventory Dashboard
+				</h2>
 				<p className="text-muted-foreground text-sm max-w-md">{error}</p>
 				<Button onClick={() => refetch()}>Retry Connection</Button>
 			</div>
@@ -162,7 +153,15 @@ export default function ExecutiveInventoryDashboardPage() {
 
 	if (!data) return null;
 
-	const { overview, storeBreakdown, fastMoving, slowMoving, reorderRecommendations, stockAging, performance } = data;
+	const {
+		overview,
+		storeBreakdown,
+		fastMoving,
+		slowMoving,
+		reorderRecommendations,
+		stockAging,
+		performance,
+	} = data;
 
 	const healthRatio = Math.round(
 		(overview.healthyStockCount / Math.max(1, overview.totalItemsCount)) * 100,
@@ -186,14 +185,20 @@ export default function ExecutiveInventoryDashboardPage() {
 			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 				<div>
 					<div className="flex items-center gap-2">
-						<h1 className="text-3xl font-bold tracking-tight">Executive Inventory Ops</h1>
-						<Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1 font-mono text-xs">
+						<h1 className="text-3xl font-bold tracking-tight">
+							Executive Inventory Ops
+						</h1>
+						<Badge
+							variant="outline"
+							className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1 font-mono text-xs"
+						>
 							<Zap className="size-3 fill-emerald-500" />
 							PostgreSQL Live Read ({performance.queryLatencyMs}ms)
 						</Badge>
 					</div>
 					<p className="text-muted-foreground text-sm mt-1">
-						Real-Time Stock Health, Operational Turnover & Automated AI Reorder Intelligence
+						Real-Time Stock Health, Operational Turnover & Automated AI Reorder
+						Intelligence
 					</p>
 				</div>
 				<div className="flex items-center gap-3">
@@ -208,7 +213,9 @@ export default function ExecutiveInventoryDashboardPage() {
 						disabled={isRefreshing}
 						className="gap-2 shadow-sm"
 					>
-						<RefreshCw className={`size-4 ${isRefreshing ? "animate-spin" : ""}`} />
+						<RefreshCw
+							className={`size-4 ${isRefreshing ? "animate-spin" : ""}`}
+						/>
 						Refresh
 					</Button>
 				</div>
@@ -218,11 +225,15 @@ export default function ExecutiveInventoryDashboardPage() {
 			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 				<Card className="border-l-4 border-l-primary shadow-sm hover:shadow-md transition-shadow">
 					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<CardTitle className="text-sm font-medium text-muted-foreground">Total Stock on Hand</CardTitle>
+						<CardTitle className="text-sm font-medium text-muted-foreground">
+							Total Stock on Hand
+						</CardTitle>
 						<Boxes className="size-4 text-primary" />
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{overview.totalSohQty.toLocaleString()} units</div>
+						<div className="text-2xl font-bold">
+							{overview.totalSohQty.toLocaleString()} units
+						</div>
 						<p className="text-xs text-muted-foreground mt-1">
 							Across {overview.totalItemsCount.toLocaleString()} active SKUs
 						</p>
@@ -231,11 +242,15 @@ export default function ExecutiveInventoryDashboardPage() {
 
 				<Card className="border-l-4 border-l-emerald-500 shadow-sm hover:shadow-md transition-shadow">
 					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<CardTitle className="text-sm font-medium text-muted-foreground">Inventory Valuation (MRP)</CardTitle>
+						<CardTitle className="text-sm font-medium text-muted-foreground">
+							Inventory Valuation (MRP)
+						</CardTitle>
 						<IndianRupee className="size-4 text-emerald-500" />
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{formatCurrency(overview.totalInventoryValueMrp)}</div>
+						<div className="text-2xl font-bold">
+							{formatCurrency(overview.totalInventoryValueMrp)}
+						</div>
 						<p className="text-xs text-muted-foreground mt-1">
 							Cost Valuation: {formatCurrency(overview.totalInventoryValueCost)}
 						</p>
@@ -244,7 +259,9 @@ export default function ExecutiveInventoryDashboardPage() {
 
 				<Card className="border-l-4 border-l-amber-500 shadow-sm hover:shadow-md transition-shadow">
 					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<CardTitle className="text-sm font-medium text-muted-foreground">Stock Health Score</CardTitle>
+						<CardTitle className="text-sm font-medium text-muted-foreground">
+							Stock Health Score
+						</CardTitle>
 						<Activity className="size-4 text-amber-500" />
 					</CardHeader>
 					<CardContent>
@@ -256,14 +273,17 @@ export default function ExecutiveInventoryDashboardPage() {
 						</div>
 						<Progress value={healthRatio} className="h-1.5 mt-2" />
 						<p className="text-xs text-destructive font-medium mt-1.5">
-							{overview.lowStockCount} Low • {overview.outOfStockCount} Out • {overview.deadStockCount} Dead Stock
+							{overview.lowStockCount} Low • {overview.outOfStockCount} Out •{" "}
+							{overview.deadStockCount} Dead Stock
 						</p>
 					</CardContent>
 				</Card>
 
 				<Card className="border-l-4 border-l-sky-500 shadow-sm hover:shadow-md transition-shadow">
 					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<CardTitle className="text-sm font-medium text-muted-foreground">Odoo SaaS Sync Status</CardTitle>
+						<CardTitle className="text-sm font-medium text-muted-foreground">
+							Odoo SaaS Sync Status
+						</CardTitle>
 						<CheckCircle2 className="size-4 text-sky-500" />
 					</CardHeader>
 					<CardContent>
@@ -273,7 +293,8 @@ export default function ExecutiveInventoryDashboardPage() {
 							</Badge>
 						</div>
 						<p className="text-xs text-muted-foreground mt-2">
-							Telemetry Processed: {overview.syncHealth.recordsProcessed.toLocaleString()} recs
+							Telemetry Processed:{" "}
+							{overview.syncHealth.recordsProcessed.toLocaleString()} recs
 						</p>
 					</CardContent>
 				</Card>
@@ -288,20 +309,32 @@ export default function ExecutiveInventoryDashboardPage() {
 							<Store className="size-5 text-primary" />
 							Store-Wise Stock Allocation Matrix
 						</CardTitle>
-						<CardDescription>Real-time stock distribution across active retail locations</CardDescription>
+						<CardDescription>
+							Real-time stock distribution across active retail locations
+						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
 						{storeBreakdown.map((store) => {
-							const pct = Math.round((store.totalQuantity / Math.max(1, overview.totalSohQty)) * 100);
+							const pct = Math.round(
+								(store.totalQuantity / Math.max(1, overview.totalSohQty)) * 100,
+							);
 							return (
-								<div key={store.storeId} className="space-y-1.5 border-b pb-3 last:border-0 last:pb-0">
+								<div
+									key={store.storeId}
+									className="space-y-1.5 border-b pb-3 last:border-0 last:pb-0"
+								>
 									<div className="flex items-center justify-between text-sm font-medium">
-										<span>{store.storeName} ({store.storeCode})</span>
-										<span className="font-mono text-xs">{store.totalQuantity.toLocaleString()} units ({pct}%)</span>
+										<span>
+											{store.storeName} ({store.storeCode})
+										</span>
+										<span className="font-mono text-xs">
+											{store.totalQuantity.toLocaleString()} units ({pct}%)
+										</span>
 									</div>
 									<Progress value={pct} className="h-2" />
 									<p className="text-xs text-muted-foreground">
-										Valuation: {formatCurrency(store.valuationMrp)} • {store.itemCount} SKUs
+										Valuation: {formatCurrency(store.valuationMrp)} •{" "}
+										{store.itemCount} SKUs
 									</p>
 								</div>
 							);
@@ -316,17 +349,26 @@ export default function ExecutiveInventoryDashboardPage() {
 							<Clock className="size-5 text-amber-500" />
 							Stock Aging & Working Capital
 						</CardTitle>
-						<CardDescription>Inventory age brackets & non-moving capital exposure</CardDescription>
+						<CardDescription>
+							Inventory age brackets & non-moving capital exposure
+						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
 						{stockAging.map((age) => (
-							<div key={age.ageRange} className="flex items-center justify-between border-b pb-2.5 last:border-0 last:pb-0">
+							<div
+								key={age.ageRange}
+								className="flex items-center justify-between border-b pb-2.5 last:border-0 last:pb-0"
+							>
 								<div>
 									<p className="font-semibold text-sm">{age.ageRange}</p>
-									<p className="text-xs text-muted-foreground">{age.itemCount} SKUs • {age.totalQuantity} units</p>
+									<p className="text-xs text-muted-foreground">
+										{age.itemCount} SKUs • {age.totalQuantity} units
+									</p>
 								</div>
 								<div className="text-right">
-									<p className="font-mono text-sm font-bold">{formatCurrency(age.valuationCost)}</p>
+									<p className="font-mono text-sm font-bold">
+										{formatCurrency(age.valuationCost)}
+									</p>
 									<Badge
 										variant="outline"
 										className={
@@ -335,7 +377,9 @@ export default function ExecutiveInventoryDashboardPage() {
 												: "text-[10px]"
 										}
 									>
-										{age.ageRange === "90+ Days" ? "Dead Stock Alert" : "Active Stock"}
+										{age.ageRange === "90+ Days"
+											? "Dead Stock Alert"
+											: "Active Stock"}
 									</Badge>
 								</div>
 							</div>
@@ -352,7 +396,9 @@ export default function ExecutiveInventoryDashboardPage() {
 							<TrendingUp className="size-5 text-emerald-500" />
 							Operational Item Turnover Velocity (ABC Analysis)
 						</CardTitle>
-						<CardDescription>Identify high-velocity drivers and slow-moving capital items</CardDescription>
+						<CardDescription>
+							Identify high-velocity drivers and slow-moving capital items
+						</CardDescription>
 					</div>
 					<div className="relative w-full md:w-64">
 						<Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
@@ -380,23 +426,37 @@ export default function ExecutiveInventoryDashboardPage() {
 									<div className="col-span-2 text-right">SOH QTY</div>
 								</div>
 								{filteredFast.map((item) => (
-									<div key={item.productId} className="grid grid-cols-12 p-3 text-sm border-b last:border-0 items-center hover:bg-muted/30 transition-colors">
+									<div
+										key={item.productId}
+										className="grid grid-cols-12 p-3 text-sm border-b last:border-0 items-center hover:bg-muted/30 transition-colors"
+									>
 										<div className="col-span-5">
 											<div className="flex items-center gap-2">
-												<Badge className="bg-emerald-600 text-white text-[10px]">A-ITEM</Badge>
+												<Badge className="bg-emerald-600 text-white text-[10px]">
+													A-ITEM
+												</Badge>
 												<div className="truncate">
 													<p className="font-medium truncate">{item.name}</p>
-													<p className="text-xs text-muted-foreground font-mono">{item.sku} • {item.category}</p>
+													<p className="text-xs text-muted-foreground font-mono">
+														{item.sku} • {item.category}
+													</p>
 												</div>
 											</div>
 										</div>
-										<div className="col-span-3 text-right font-semibold">{item.unitsSold30d} units</div>
+										<div className="col-span-3 text-right font-semibold">
+											{item.unitsSold30d} units
+										</div>
 										<div className="col-span-2 text-right">
-											<Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs font-mono">
+											<Badge
+												variant="outline"
+												className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs font-mono"
+											>
 												{item.velocityDaily}/day
 											</Badge>
 										</div>
-										<div className="col-span-2 text-right font-mono font-bold">{item.qtyOnHand}</div>
+										<div className="col-span-2 text-right font-mono font-bold">
+											{item.qtyOnHand}
+										</div>
 									</div>
 								))}
 							</div>
@@ -411,23 +471,37 @@ export default function ExecutiveInventoryDashboardPage() {
 									<div className="col-span-2 text-right">SOH QTY</div>
 								</div>
 								{filteredSlow.map((item) => (
-									<div key={item.productId} className="grid grid-cols-12 p-3 text-sm border-b last:border-0 items-center hover:bg-muted/30 transition-colors">
+									<div
+										key={item.productId}
+										className="grid grid-cols-12 p-3 text-sm border-b last:border-0 items-center hover:bg-muted/30 transition-colors"
+									>
 										<div className="col-span-5">
 											<div className="flex items-center gap-2">
-												<Badge className="bg-amber-600 text-white text-[10px]">C-ITEM</Badge>
+												<Badge className="bg-amber-600 text-white text-[10px]">
+													C-ITEM
+												</Badge>
 												<div className="truncate">
 													<p className="font-medium truncate">{item.name}</p>
-													<p className="text-xs text-muted-foreground font-mono">{item.sku} • {item.category}</p>
+													<p className="text-xs text-muted-foreground font-mono">
+														{item.sku} • {item.category}
+													</p>
 												</div>
 											</div>
 										</div>
-										<div className="col-span-3 text-right font-semibold text-muted-foreground">{item.unitsSold30d} units</div>
+										<div className="col-span-3 text-right font-semibold text-muted-foreground">
+											{item.unitsSold30d} units
+										</div>
 										<div className="col-span-2 text-right">
-											<Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs font-mono">
+											<Badge
+												variant="outline"
+												className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs font-mono"
+											>
 												{item.velocityDaily}/day
 											</Badge>
 										</div>
-										<div className="col-span-2 text-right font-mono font-bold text-amber-600">{item.qtyOnHand}</div>
+										<div className="col-span-2 text-right font-mono font-bold text-amber-600">
+											{item.qtyOnHand}
+										</div>
 									</div>
 								))}
 							</div>
@@ -446,10 +520,13 @@ export default function ExecutiveInventoryDashboardPage() {
 								AI Automated Replenishment Recommendations
 							</CardTitle>
 							<CardDescription>
-								Calculated from 30-day velocity, lead time & safety stock buffers
+								Calculated from 30-day velocity, lead time & safety stock
+								buffers
 							</CardDescription>
 						</div>
-						<Badge className="bg-violet-600 text-white font-mono">AI Engine Active</Badge>
+						<Badge className="bg-violet-600 text-white font-mono">
+							AI Engine Active
+						</Badge>
 					</div>
 				</CardHeader>
 				<CardContent>
@@ -462,7 +539,10 @@ export default function ExecutiveInventoryDashboardPage() {
 							<div className="col-span-2 text-right">SUGGESTED REORDER</div>
 						</div>
 						{reorderRecommendations.map((rec) => (
-							<div key={rec.productId} className="grid grid-cols-12 p-3 text-sm border-b last:border-0 items-center hover:bg-muted/30 transition-colors">
+							<div
+								key={rec.productId}
+								className="grid grid-cols-12 p-3 text-sm border-b last:border-0 items-center hover:bg-muted/30 transition-colors"
+							>
 								<div className="col-span-4">
 									<div className="flex items-center gap-2">
 										<Badge
@@ -470,21 +550,29 @@ export default function ExecutiveInventoryDashboardPage() {
 												rec.urgency === "critical"
 													? "bg-destructive text-white text-[10px]"
 													: rec.urgency === "high"
-													? "bg-amber-500 text-white text-[10px]"
-													: "bg-blue-500 text-white text-[10px]"
+														? "bg-amber-500 text-white text-[10px]"
+														: "bg-blue-500 text-white text-[10px]"
 											}
 										>
 											{rec.urgency.toUpperCase()}
 										</Badge>
 										<div className="truncate">
 											<p className="font-medium truncate">{rec.name}</p>
-											<p className="text-xs text-muted-foreground font-mono">{rec.sku}</p>
+											<p className="text-xs text-muted-foreground font-mono">
+												{rec.sku}
+											</p>
 										</div>
 									</div>
 								</div>
-								<div className="col-span-2 text-center font-mono font-bold text-destructive">{rec.qtyOnHand}</div>
-								<div className="col-span-2 text-center text-xs font-mono">{rec.dailyRunRate} / day</div>
-								<div className="col-span-2 text-center font-bold text-xs text-amber-600 font-mono">{rec.daysOfSupplyRemaining} days left</div>
+								<div className="col-span-2 text-center font-mono font-bold text-destructive">
+									{rec.qtyOnHand}
+								</div>
+								<div className="col-span-2 text-center text-xs font-mono">
+									{rec.dailyRunRate} / day
+								</div>
+								<div className="col-span-2 text-center font-bold text-xs text-amber-600 font-mono">
+									{rec.daysOfSupplyRemaining} days left
+								</div>
 								<div className="col-span-2 text-right font-mono font-bold text-violet-700 dark:text-violet-300">
 									+{rec.suggestedReorderQty} units
 								</div>

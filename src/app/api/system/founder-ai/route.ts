@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { getExecutiveInventoryMetrics, getStoreInventoryBreakdown } from "@/lib/repositories/inventory.repository";
+import {
+	getExecutiveInventoryMetrics,
+	getStoreInventoryBreakdown,
+} from "@/lib/repositories/inventory.repository";
 
 export const runtime = "nodejs";
 
@@ -37,7 +40,7 @@ export async function GET() {
 			LIMIT 5
 		`;
 
-		const [inventoryMetrics, storeInventory] = await Promise.all([
+		const [inventoryMetrics, _storeInventory] = await Promise.all([
 			getExecutiveInventoryMetrics(),
 			getStoreInventoryBreakdown(),
 		]);
@@ -63,7 +66,12 @@ export async function GET() {
 				})),
 				inventory: inventoryMetrics,
 				alerts: {
-					marginAlerts: inventoryMetrics.lowStockCount > 0 ? [`${inventoryMetrics.lowStockCount} items require reorder stock`] : [],
+					marginAlerts:
+						inventoryMetrics.lowStockCount > 0
+							? [
+									`${inventoryMetrics.lowStockCount} items require reorder stock`,
+								]
+							: [],
 					syncHealth: inventoryMetrics.syncHealth.status,
 				},
 			},
@@ -71,7 +79,10 @@ export async function GET() {
 	} catch (error: any) {
 		console.error("Failed to load Founder AI Ops data:", error);
 		return NextResponse.json(
-			{ success: false, error: error.message || "Failed to load Founder AI Ops data" },
+			{
+				success: false,
+				error: error.message || "Failed to load Founder AI Ops data",
+			},
 			{ status: 500 },
 		);
 	}

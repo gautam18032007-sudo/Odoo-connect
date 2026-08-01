@@ -60,14 +60,17 @@ export function calculateBusinessHealth(input: {
 	);
 
 	let status: DomainHealthScores["status"] = "HEALTHY";
-	let statusMessage = "Business operations are performing stably across key domains.";
+	let statusMessage =
+		"Business operations are performing stably across key domains.";
 
 	if (overallBusinessHealth >= 90) {
 		status = "EXCELLENT";
-		statusMessage = "All commercial and customer growth indicators are exceeding targets.";
+		statusMessage =
+			"All commercial and customer growth indicators are exceeding targets.";
 	} else if (overallBusinessHealth < 70) {
 		status = "NEEDS_ATTENTION";
-		statusMessage = "Revenue dip or low retention requires proactive founder intervention.";
+		statusMessage =
+			"Revenue dip or low retention requires proactive founder intervention.";
 	} else if (overallBusinessHealth < 50) {
 		status = "CRITICAL";
 		statusMessage = "Critical margin erosion or revenue decline detected.";

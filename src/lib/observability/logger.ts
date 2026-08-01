@@ -21,7 +21,10 @@ class ObservabilityLogger {
 		return `req_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
 	}
 
-	public startRequest(method: string, path: string): { requestId: string; startTime: number } {
+	public startRequest(
+		_method: string,
+		_path: string,
+	): { requestId: string; startTime: number } {
 		const requestId = this.generateRequestId();
 		const startTime = performance.now();
 		return { requestId, startTime };
@@ -45,7 +48,12 @@ class ObservabilityLogger {
 		}
 	}
 
-	public logAudit(actor: string, action: string, target: string, details: Record<string, any>): void {
+	public logAudit(
+		actor: string,
+		action: string,
+		target: string,
+		details: Record<string, any>,
+	): void {
 		const logPayload = {
 			timestamp: new Date().toISOString(),
 			type: "AUDIT_LOG",

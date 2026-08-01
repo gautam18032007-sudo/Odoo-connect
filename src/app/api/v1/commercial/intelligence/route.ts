@@ -1,10 +1,13 @@
-import { type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
+import { getCommercialIntelligence } from "@/features/commercial/services/commercial.service";
 import { createApiErrorResponse, createApiResponse } from "@/lib/api/response";
 import { logger } from "@/lib/observability/logger";
-import { getCommercialIntelligence } from "@/features/commercial/services/commercial.service";
 
-export async function GET(req: NextRequest) {
-	const { requestId, startTime } = logger.startRequest("GET", "/api/v1/commercial/intelligence");
+export async function GET(_req: NextRequest) {
+	const { requestId, startTime } = logger.startRequest(
+		"GET",
+		"/api/v1/commercial/intelligence",
+	);
 
 	try {
 		const data = await getCommercialIntelligence();
@@ -28,9 +31,12 @@ export async function GET(req: NextRequest) {
 			error: err.message,
 		});
 
-		return createApiErrorResponse(err.message || "Failed to fetch commercial intelligence", {
-			requestId,
-			startTime,
-		});
+		return createApiErrorResponse(
+			err.message || "Failed to fetch commercial intelligence",
+			{
+				requestId,
+				startTime,
+			},
+		);
 	}
 }

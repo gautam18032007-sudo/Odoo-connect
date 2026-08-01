@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { getCrmLeads, getCrmPipelineSummary } from "@/lib/repositories/crm.repository";
+import {
+	getCrmLeads,
+	getCrmPipelineSummary,
+} from "@/lib/repositories/crm.repository";
 
 export async function GET(req: NextRequest) {
 	try {
@@ -22,7 +25,10 @@ export async function GET(req: NextRequest) {
 	} catch (err: any) {
 		console.error("Failed to fetch CRM pipeline data:", err);
 		return NextResponse.json(
-			{ success: false, error: err.message || "Failed to fetch CRM pipeline data" },
+			{
+				success: false,
+				error: err.message || "Failed to fetch CRM pipeline data",
+			},
 			{ status: 500 },
 		);
 	}

@@ -25,7 +25,10 @@ async function fetchAndUpsertMissingProducts(
 			"search_read",
 			[],
 			{
-				domain: [["id", "in", productIds]],
+				domain: [
+					["id", "in", productIds],
+					["active", "in", [true, false]],
+				],
 				fields: [
 					"id",
 					"name",
@@ -218,10 +221,16 @@ async function syncStandardSales(
 			const partnerId = Array.isArray(rec.partner_id)
 				? Number(rec.partner_id[0])
 				: null;
+			const rawDate = String(rec.date_order || "");
+			const utcDateStr = rawDate
+				? rawDate.includes("T")
+					? rawDate
+					: `${rawDate.replace(" ", "T")}Z`
+				: new Date().toISOString();
 			return {
 				id: `sale_${rec.id}`,
 				name: String(rec.name),
-				dateOrder: new Date(rec.date_order || Date.now()).toISOString(),
+				dateOrder: new Date(utcDateStr).toISOString(),
 				partnerId,
 				storeId: null, // Standard orders don't have pos config stores
 				amountTotal: Number(rec.amount_total || 0),
@@ -281,7 +290,7 @@ async function syncStandardSales(
 				};
 			});
 
-			let missingProductIds = await upsertSalesLines(salesLines);
+			const missingProductIds = await upsertSalesLines(salesLines);
 			if (missingProductIds.length > 0) {
 				await fetchAndUpsertMissingProducts(client, missingProductIds);
 				await upsertSalesLines(salesLines);
@@ -364,10 +373,17 @@ async function syncPosSales(
 			const taxAmount = Number(rec.amount_tax || 0);
 			const untaxedAmount = totalAmount - taxAmount;
 
+			const rawDate = String(rec.date_order || "");
+			const utcDateStr = rawDate
+				? rawDate.includes("T")
+					? rawDate
+					: `${rawDate.replace(" ", "T")}Z`
+				: new Date().toISOString();
+
 			return {
 				id: `pos_${rec.id}`,
 				name: String(rec.name),
-				dateOrder: new Date(rec.date_order || Date.now()).toISOString(),
+				dateOrder: new Date(utcDateStr).toISOString(),
 				partnerId,
 				storeId,
 				amountTotal: totalAmount,
@@ -428,7 +444,7 @@ async function syncPosSales(
 				};
 			});
 
-			let missingProductIds = await upsertSalesLines(salesLines);
+			const missingProductIds = await upsertSalesLines(salesLines);
 			if (missingProductIds.length > 0) {
 				await fetchAndUpsertMissingProducts(client, missingProductIds);
 				await upsertSalesLines(salesLines);

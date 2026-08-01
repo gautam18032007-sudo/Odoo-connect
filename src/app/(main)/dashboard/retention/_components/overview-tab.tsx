@@ -1,6 +1,6 @@
 "use client";
 
-import { Coins, Layers, Sparkles, TrendingUp, Users } from "lucide-react";
+import { Coins, Layers, TrendingUp, Users } from "lucide-react";
 import { useMemo } from "react";
 import {
 	CartesianGrid,
@@ -20,7 +20,6 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { MetricCard } from "@/components/ui/metric-card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
 	TableBody,

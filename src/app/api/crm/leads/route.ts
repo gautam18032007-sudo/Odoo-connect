@@ -94,7 +94,10 @@ export async function PATCH(req: NextRequest) {
 			);
 		}
 
-		return NextResponse.json({ success: true, message: `Lead ${id} updated to ${stage}` });
+		return NextResponse.json({
+			success: true,
+			message: `Lead ${id} updated to ${stage}`,
+		});
 	} catch (err: any) {
 		return NextResponse.json(
 			{ success: false, error: err.message || "Failed to update lead" },

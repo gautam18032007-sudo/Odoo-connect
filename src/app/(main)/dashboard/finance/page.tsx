@@ -2,24 +2,25 @@
 
 import { format } from "date-fns";
 import {
-	ArrowDownRight,
 	ArrowUpRight,
 	Building2,
 	CheckCircle2,
 	DollarSign,
-	FileText,
-	PieChart,
 	Receipt,
 	RefreshCw,
-	ShoppingBag,
 	TrendingUp,
 	Wallet,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
 import { PipelineStatusBanner } from "@/components/founder/pipeline-status-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -30,9 +31,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { formatCurrency } from "@/lib/utils";
-
 import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
+import { formatCurrency } from "@/lib/utils";
 
 export default function FinancePage() {
 	const fetcher = async (signal: AbortSignal) => {
@@ -133,7 +133,9 @@ export default function FinancePage() {
 						</div>
 						<div className="flex items-center gap-1 text-xs text-muted-foreground">
 							<span>{openPurchaseOrdersCount} Open POs (</span>
-							<span className="font-mono">{formatCurrency(openPurchaseOrdersValue)}</span>
+							<span className="font-mono">
+								{formatCurrency(openPurchaseOrdersValue)}
+							</span>
 							<span>)</span>
 						</div>
 					</CardContent>
@@ -185,7 +187,10 @@ export default function FinancePage() {
 					<CardHeader>
 						<CardTitle className="leading-none flex items-center justify-between">
 							<span>Recent Purchase Orders</span>
-							<Badge variant="outline" className="font-mono text-xs font-normal">
+							<Badge
+								variant="outline"
+								className="font-mono text-xs font-normal"
+							>
 								Odoo Integration
 							</Badge>
 						</CardTitle>
@@ -214,7 +219,9 @@ export default function FinancePage() {
 											<TableCell>
 												<div className="flex items-center gap-2">
 													<Building2 className="size-3.5 text-muted-foreground shrink-0" />
-													<span className="font-medium text-xs">{po.vendorName}</span>
+													<span className="font-medium text-xs">
+														{po.vendorName}
+													</span>
 												</div>
 											</TableCell>
 											<TableCell className="text-xs text-muted-foreground">
@@ -239,8 +246,12 @@ export default function FinancePage() {
 									))
 								) : (
 									<TableRow>
-										<TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
-											No purchase orders recorded yet. Webhooks will automatically populate POs from Odoo.
+										<TableCell
+											colSpan={5}
+											className="h-32 text-center text-muted-foreground"
+										>
+											No purchase orders recorded yet. Webhooks will
+											automatically populate POs from Odoo.
 										</TableCell>
 									</TableRow>
 								)}
@@ -260,12 +271,16 @@ export default function FinancePage() {
 					<CardContent className="flex flex-col gap-4">
 						{vendorBreakdown.length > 0 ? (
 							vendorBreakdown.map((item: any, idx: number) => {
-								const percentage = totalPurchaseSpend > 0
-									? Math.round((item.totalSpend / totalPurchaseSpend) * 100)
-									: 0;
+								const percentage =
+									totalPurchaseSpend > 0
+										? Math.round((item.totalSpend / totalPurchaseSpend) * 100)
+										: 0;
 
 								return (
-									<div key={item.vendor || idx} className="flex flex-col gap-1.5">
+									<div
+										key={item.vendor || idx}
+										className="flex flex-col gap-1.5"
+									>
 										<div className="flex items-center justify-between text-xs">
 											<span className="font-semibold text-foreground truncate">
 												{item.vendor}

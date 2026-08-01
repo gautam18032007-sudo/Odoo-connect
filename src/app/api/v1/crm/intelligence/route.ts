@@ -1,10 +1,13 @@
-import { type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
+import { getCrmIntelligence } from "@/features/crm/services/crm.service";
 import { createApiErrorResponse, createApiResponse } from "@/lib/api/response";
 import { logger } from "@/lib/observability/logger";
-import { getCrmIntelligence } from "@/features/crm/services/crm.service";
 
-export async function GET(req: NextRequest) {
-	const { requestId, startTime } = logger.startRequest("GET", "/api/v1/crm/intelligence");
+export async function GET(_req: NextRequest) {
+	const { requestId, startTime } = logger.startRequest(
+		"GET",
+		"/api/v1/crm/intelligence",
+	);
 
 	try {
 		const data = await getCrmIntelligence();
@@ -28,9 +31,12 @@ export async function GET(req: NextRequest) {
 			error: err.message,
 		});
 
-		return createApiErrorResponse(err.message || "Failed to fetch CRM intelligence", {
-			requestId,
-			startTime,
-		});
+		return createApiErrorResponse(
+			err.message || "Failed to fetch CRM intelligence",
+			{
+				requestId,
+				startTime,
+			},
+		);
 	}
 }

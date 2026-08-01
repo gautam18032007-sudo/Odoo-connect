@@ -6,7 +6,9 @@ import { type StoreApi, useStore } from "zustand";
 
 import { createSettingsStore, type SettingsState } from "./settings-store";
 
-const SettingsStoreContext = createContext<StoreApi<SettingsState> | null>(null);
+const SettingsStoreContext = createContext<StoreApi<SettingsState> | null>(
+	null,
+);
 
 /**
  * SettingsProvider
@@ -15,27 +17,33 @@ const SettingsStoreContext = createContext<StoreApi<SettingsState> | null>(null)
  * Children can consume the store via `useSettingsStore(selector)`.
  */
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [store] = useState<StoreApi<SettingsState>>(() => createSettingsStore());
+	const [store] = useState<StoreApi<SettingsState>>(() =>
+		createSettingsStore(),
+	);
 
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const res = await fetch("/api/settings");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.settings) {
-            store.getState().hydrate(data.settings);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch settings", err);
-      }
-    };
+	useEffect(() => {
+		const fetchSettings = async () => {
+			try {
+				const res = await fetch("/api/settings");
+				if (res.ok) {
+					const data = await res.json();
+					if (data.settings) {
+						store.getState().hydrate(data.settings);
+					}
+				}
+			} catch (err) {
+				console.error("Failed to fetch settings", err);
+			}
+		};
 
-    void fetchSettings();
-  }, [store]);
+		void fetchSettings();
+	}, [store]);
 
-  return <SettingsStoreContext.Provider value={store}>{children}</SettingsStoreContext.Provider>;
+	return (
+		<SettingsStoreContext.Provider value={store}>
+			{children}
+		</SettingsStoreContext.Provider>
+	);
 }
 
 /**
@@ -44,8 +52,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
  * Usage:
  *   const currency = useSettingsStore((s) => s.currencySymbol);
  */
-export const useSettingsStore = <T,>(selector: (state: SettingsState) => T): T => {
-  const store = useContext(SettingsStoreContext);
-  if (!store) throw new Error("Missing SettingsProvider in the component tree");
-  return useStore(store, selector);
+export const useSettingsStore = <T,>(
+	selector: (state: SettingsState) => T,
+): T => {
+	const store = useContext(SettingsStoreContext);
+	if (!store) throw new Error("Missing SettingsProvider in the component tree");
+	return useStore(store, selector);
 };

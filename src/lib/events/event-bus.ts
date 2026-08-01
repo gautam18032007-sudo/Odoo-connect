@@ -25,18 +25,25 @@ type EventListener<T = any> = (event: DomainEvent<T>) => void | Promise<void>;
 class DomainEventBus {
 	private listeners: Map<DomainEventType, Set<EventListener>> = new Map();
 
-	public subscribe<T>(eventType: DomainEventType, listener: EventListener<T>): () => void {
+	public subscribe<T>(
+		eventType: DomainEventType,
+		listener: EventListener<T>,
+	): () => void {
 		if (!this.listeners.has(eventType)) {
 			this.listeners.set(eventType, new Set());
 		}
-		this.listeners.get(eventType)!.add(listener);
+		this.listeners.get(eventType)?.add(listener);
 
 		return () => {
 			this.listeners.get(eventType)?.delete(listener);
 		};
 	}
 
-	public async publish<T>(eventType: DomainEventType, actor: string, payload: T): Promise<void> {
+	public async publish<T>(
+		eventType: DomainEventType,
+		actor: string,
+		payload: T,
+	): Promise<void> {
 		const event: DomainEvent<T> = {
 			eventId: `evt_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`,
 			eventType,
@@ -46,7 +53,10 @@ class DomainEventBus {
 		};
 
 		if (process.env.NODE_ENV === "development") {
-			console.log(`[EVENT_BUS] Event Emitted: ${eventType} by ${actor}`, payload);
+			console.log(
+				`[EVENT_BUS] Event Emitted: ${eventType} by ${actor}`,
+				payload,
+			);
 		}
 
 		const eventListeners = this.listeners.get(eventType);

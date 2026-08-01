@@ -48,7 +48,9 @@ export async function getStoreScorecards(): Promise<StoreScorecard[]> {
 	}
 }
 
-export async function getCommercialBrandBreakdown(): Promise<Array<{ brand: string; revenue: number; orderCount: number }>> {
+export async function getCommercialBrandBreakdown(): Promise<
+	Array<{ brand: string; revenue: number; orderCount: number }>
+> {
 	try {
 		const rows = await sql`
 			SELECT 

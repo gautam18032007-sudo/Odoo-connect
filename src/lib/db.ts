@@ -1,7 +1,7 @@
-import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { type NeonQueryFunction, neon } from "@neondatabase/serverless";
 
 // Placeholder mock SQL executor when DATABASE_URL is missing
-const mockSql = async (strings: TemplateStringsArray, ...values: any[]) => {
+const mockSql = async (_strings: TemplateStringsArray, ..._values: any[]) => {
 	console.warn("Neon DB not configured. Missing DATABASE_URL.");
 	return [];
 };
@@ -29,7 +29,10 @@ function createResilientSql(): NeonQueryFunction<false, false> {
 		);
 	};
 
-	const resilientSql = async (strings: TemplateStringsArray, ...values: any[]) => {
+	const resilientSql = async (
+		strings: TemplateStringsArray,
+		...values: any[]
+	) => {
 		let attempts = 0;
 		const maxAttempts = 3;
 		while (attempts < maxAttempts) {

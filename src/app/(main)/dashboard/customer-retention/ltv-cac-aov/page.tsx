@@ -1,13 +1,6 @@
 import { format } from "date-fns";
-import React from "react";
 import { Badge } from "@/components/ui/badge";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
 	Table,
@@ -50,7 +43,7 @@ export default async function LtvCacAovPage({ searchParams }: PageProps) {
 
 	// LTV:CAC Ratio
 	const ltvCacRatio = cac > 0 ? ltv / cac : 0;
-	const formattedRatio = ltvCacRatio.toFixed(1) + "x";
+	const formattedRatio = `${ltvCacRatio.toFixed(1)}x`;
 
 	// Classification for ratio
 	let ratioBadge = {
@@ -124,7 +117,7 @@ export default async function LtvCacAovPage({ searchParams }: PageProps) {
 		};
 	});
 
-	const formattedDate = format(new Date(), "MMMM yyyy");
+	const _formattedDate = format(new Date(), "MMMM yyyy");
 
 	return (
 		<div className="flex flex-col gap-8 p-6 md:p-10 bg-black min-h-screen text-zinc-100 font-sans">

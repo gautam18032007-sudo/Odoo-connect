@@ -1,6 +1,12 @@
 import { calculateLeadScore } from "@/lib/intelligence/score";
-import { calculatePipelineVelocity, calculateWinRate } from "@/lib/metrics/engine";
-import { getCrmLeads, getCrmPipelineSummary } from "@/lib/repositories/crm.repository";
+import {
+	calculatePipelineVelocity,
+	calculateWinRate,
+} from "@/lib/metrics/engine";
+import {
+	getCrmLeads,
+	getCrmPipelineSummary,
+} from "@/lib/repositories/crm.repository";
 
 export async function getCrmIntelligence() {
 	const [summary, rawLeads] = await Promise.all([
@@ -28,7 +34,11 @@ export async function getCrmIntelligence() {
 
 	const closedWonCount = rawLeads.filter((l) => l.won).length;
 	const winRate = calculateWinRate(closedWonCount, rawLeads.length);
-	const velocity = calculatePipelineVelocity(summary.totalPipelineValue, winRate, 30);
+	const velocity = calculatePipelineVelocity(
+		summary.totalPipelineValue,
+		winRate,
+		30,
+	);
 
 	return {
 		summary: {

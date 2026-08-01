@@ -36,12 +36,18 @@ export function PipelineStatusBanner() {
 					<span>Pipeline Sync:</span>
 				</div>
 
-				<Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1.5 py-0.5 text-xs">
+				<Badge
+					variant="outline"
+					className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1.5 py-0.5 text-xs"
+				>
 					<CheckCircle2 className="size-3.5" />
 					Odoo Webhooks Active
 				</Badge>
 
-				<Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 gap-1.5 py-0.5 text-xs">
+				<Badge
+					variant="outline"
+					className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 gap-1.5 py-0.5 text-xs"
+				>
 					<Activity className="size-3.5" />
 					Staging-to-Fact Validated
 				</Badge>
@@ -49,7 +55,9 @@ export function PipelineStatusBanner() {
 				{status?.dateRange?.end && (
 					<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
 						<Clock className="size-3.5" />
-						<span>Latest Sale: <strong>{status.dateRange.end}</strong></span>
+						<span>
+							Latest Sale: <strong>{status.dateRange.end}</strong>
+						</span>
 					</div>
 				)}
 			</div>
@@ -68,7 +76,9 @@ export function PipelineStatusBanner() {
 					className="text-muted-foreground hover:text-foreground"
 					title="Refresh pipeline status"
 				>
-					<RefreshCw className={`size-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+					<RefreshCw
+						className={`size-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+					/>
 				</Button>
 			</div>
 		</div>

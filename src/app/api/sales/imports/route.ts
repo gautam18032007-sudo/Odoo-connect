@@ -5,7 +5,8 @@ export async function POST() {
 		{
 			success: false,
 			deprecated: true,
-			error: "Excel import pipeline has been deprecated. ZenZebra CRM now syncs real-time data directly from Odoo SaaS PostgreSQL.",
+			error:
+				"Excel import pipeline has been deprecated. ZenZebra CRM now syncs real-time data directly from Odoo SaaS PostgreSQL.",
 		},
 		{ status: 410 },
 	);
@@ -16,7 +17,8 @@ export async function GET() {
 		{
 			success: false,
 			deprecated: true,
-			message: "Excel import pipeline has been deprecated. Live synchronization is managed via Odoo background worker.",
+			message:
+				"Excel import pipeline has been deprecated. Live synchronization is managed via Odoo background worker.",
 		},
 		{ status: 410 },
 	);

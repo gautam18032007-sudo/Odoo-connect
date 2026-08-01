@@ -121,7 +121,9 @@ export async function getExecutiveInventoryMetrics(): Promise<InventoryOverviewM
 /**
  * Store-wise inventory breakdown.
  */
-export async function getStoreInventoryBreakdown(): Promise<StoreInventoryBreakdown[]> {
+export async function getStoreInventoryBreakdown(): Promise<
+	StoreInventoryBreakdown[]
+> {
 	const result = await sql`
 		SELECT 
 			s.id AS store_id,
@@ -140,9 +142,30 @@ export async function getStoreInventoryBreakdown(): Promise<StoreInventoryBreakd
 	if (result.length === 0) {
 		// Fallback dataset if stores table is not populated yet
 		return [
-			{ storeId: 1, storeName: "ZenZebra Flagship Store", storeCode: "ZZ", itemCount: 142, totalQuantity: 1250, valuationMrp: 450000 },
-			{ storeId: 2, storeName: "KLJ Noida Store", storeCode: "KLJ", itemCount: 98, totalQuantity: 840, valuationMrp: 280000 },
-			{ storeId: 3, storeName: "Smartworks Noida Store", storeCode: "SWN", itemCount: 110, totalQuantity: 960, valuationMrp: 340000 },
+			{
+				storeId: 1,
+				storeName: "ZenZebra Flagship Store",
+				storeCode: "ZZ",
+				itemCount: 142,
+				totalQuantity: 1250,
+				valuationMrp: 450000,
+			},
+			{
+				storeId: 2,
+				storeName: "KLJ Noida Store",
+				storeCode: "KLJ",
+				itemCount: 98,
+				totalQuantity: 840,
+				valuationMrp: 280000,
+			},
+			{
+				storeId: 3,
+				storeName: "Smartworks Noida Store",
+				storeCode: "SWN",
+				itemCount: 110,
+				totalQuantity: 960,
+				valuationMrp: 340000,
+			},
 		];
 	}
 
@@ -209,7 +232,9 @@ export async function getFastSlowMovingProducts(): Promise<{
 /**
  * Products requiring automated AI reorder recommendations.
  */
-export async function getReorderRecommendations(): Promise<ReorderRecommendation[]> {
+export async function getReorderRecommendations(): Promise<
+	ReorderRecommendation[]
+> {
 	const result = await sql`
 		SELECT 
 			p.id,
@@ -253,13 +278,35 @@ export async function getReorderRecommendations(): Promise<ReorderRecommendation
 /**
  * Stock aging distribution.
  */
-export async function getStockAgingDistribution(): Promise<StockAgingCategory[]> {
+export async function getStockAgingDistribution(): Promise<
+	StockAgingCategory[]
+> {
 	const overview = await getExecutiveInventoryMetrics();
 
 	return [
-		{ ageRange: "0-30 Days", itemCount: Math.round(overview.totalItemsCount * 0.65), totalQuantity: Math.round(overview.totalSohQty * 0.65), valuationCost: Math.round(overview.totalInventoryValueCost * 0.65) },
-		{ ageRange: "31-60 Days", itemCount: Math.round(overview.totalItemsCount * 0.20), totalQuantity: Math.round(overview.totalSohQty * 0.20), valuationCost: Math.round(overview.totalInventoryValueCost * 0.20) },
-		{ ageRange: "61-90 Days", itemCount: Math.round(overview.totalItemsCount * 0.10), totalQuantity: Math.round(overview.totalSohQty * 0.10), valuationCost: Math.round(overview.totalInventoryValueCost * 0.10) },
-		{ ageRange: "90+ Days", itemCount: overview.deadStockCount, totalQuantity: Math.round(overview.totalSohQty * 0.05), valuationCost: Math.round(overview.totalInventoryValueCost * 0.05) },
+		{
+			ageRange: "0-30 Days",
+			itemCount: Math.round(overview.totalItemsCount * 0.65),
+			totalQuantity: Math.round(overview.totalSohQty * 0.65),
+			valuationCost: Math.round(overview.totalInventoryValueCost * 0.65),
+		},
+		{
+			ageRange: "31-60 Days",
+			itemCount: Math.round(overview.totalItemsCount * 0.2),
+			totalQuantity: Math.round(overview.totalSohQty * 0.2),
+			valuationCost: Math.round(overview.totalInventoryValueCost * 0.2),
+		},
+		{
+			ageRange: "61-90 Days",
+			itemCount: Math.round(overview.totalItemsCount * 0.1),
+			totalQuantity: Math.round(overview.totalSohQty * 0.1),
+			valuationCost: Math.round(overview.totalInventoryValueCost * 0.1),
+		},
+		{
+			ageRange: "90+ Days",
+			itemCount: overview.deadStockCount,
+			totalQuantity: Math.round(overview.totalSohQty * 0.05),
+			valuationCost: Math.round(overview.totalInventoryValueCost * 0.05),
+		},
 	];
 }

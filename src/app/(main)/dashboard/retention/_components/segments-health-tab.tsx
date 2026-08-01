@@ -1,22 +1,12 @@
 "use client";
 
 import {
-	Activity,
-	AlertCircle,
-	Award,
 	CheckCircle,
 	ChevronLeft,
 	ChevronRight,
 	Download,
-	Heart,
-	HelpCircle,
-	Minus,
 	Search,
-	ShieldAlert,
 	Sparkles,
-	TrendingDown,
-	TrendingUp,
-	Zap,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
@@ -36,13 +26,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
-	CardContent,
 	CardDescription,
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { MetricCard } from "@/components/ui/metric-card";
 import { Progress } from "@/components/ui/progress";
 import {
 	Select,
@@ -314,6 +302,27 @@ export function SegmentsHealthTab({ hasData }: { hasData: boolean }) {
 		toast.success("PDF export downloaded successfully!");
 	};
 
+	// Chart data formatting — must be declared BEFORE any early returns (Rules of Hooks)
+	const rfmChartData = useMemo(() => {
+		return [
+			{ name: "Champions", value: segmentCounts.Champions, color: "#10b981" },
+			{ name: "Loyal", value: segmentCounts.Loyal, color: "#3b82f6" },
+			{ name: "At risk", value: segmentCounts["At Risk"], color: "#f59e0b" },
+			{ name: "Lost", value: segmentCounts.Lost, color: "#ef4444" },
+		].filter((d) => d.value > 0);
+	}, [segmentCounts]);
+
+	const typeChartData = useMemo(() => {
+		return [
+			{ name: "New", value: newVsReturningCounts.New, color: "#8b5cf6" },
+			{
+				name: "Returning",
+				value: newVsReturningCounts.Returning,
+				color: "#3b82f6",
+			},
+		].filter((d) => d.value > 0);
+	}, [newVsReturningCounts]);
+
 	if (isLoading || !healthData) {
 		return (
 			<div className="grid gap-6 grid-cols-1 md:grid-cols-4 mt-2">
@@ -394,27 +403,6 @@ export function SegmentsHealthTab({ hasData }: { hasData: boolean }) {
 			description: "This action isn't wired to a live provider yet.",
 		});
 	};
-
-	// Chart data formatting
-	const rfmChartData = useMemo(() => {
-		return [
-			{ name: "Champions", value: segmentCounts.Champions, color: "#10b981" },
-			{ name: "Loyal", value: segmentCounts.Loyal, color: "#3b82f6" },
-			{ name: "At risk", value: segmentCounts["At Risk"], color: "#f59e0b" },
-			{ name: "Lost", value: segmentCounts.Lost, color: "#ef4444" },
-		].filter((d) => d.value > 0);
-	}, [segmentCounts]);
-
-	const typeChartData = useMemo(() => {
-		return [
-			{ name: "New", value: newVsReturningCounts.New, color: "#8b5cf6" },
-			{
-				name: "Returning",
-				value: newVsReturningCounts.Returning,
-				color: "#3b82f6",
-			},
-		].filter((d) => d.value > 0);
-	}, [newVsReturningCounts]);
 
 	return (
 		<div className="flex flex-col gap-6 text-zinc-100 font-sans">
@@ -500,6 +488,7 @@ export function SegmentsHealthTab({ hasData }: { hasData: boolean }) {
 												dataKey="value"
 											>
 												{rfmChartData.map((entry, index) => (
+													// biome-ignore lint/suspicious/noArrayIndexKey: stable chart segments
 													<Cell key={`cell-${index}`} fill={entry.color} />
 												))}
 											</Pie>
@@ -550,6 +539,7 @@ export function SegmentsHealthTab({ hasData }: { hasData: boolean }) {
 												dataKey="value"
 											>
 												{typeChartData.map((entry, index) => (
+													// biome-ignore lint/suspicious/noArrayIndexKey: stable chart segments
 													<Cell key={`cell-${index}`} fill={entry.color} />
 												))}
 											</Pie>

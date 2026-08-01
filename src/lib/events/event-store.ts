@@ -4,7 +4,7 @@
  */
 
 import { sql } from "@/lib/db";
-import { type DomainEvent } from "./event-bus";
+import type { DomainEvent } from "./event-bus";
 
 export interface StoredEvent extends DomainEvent {
 	dbId?: number;
@@ -15,9 +15,13 @@ export interface StoredEvent extends DomainEvent {
 }
 
 export class DomainEventStore {
-	public async persistEvent(event: DomainEvent, correlationId?: string): Promise<number | null> {
+	public async persistEvent(
+		event: DomainEvent,
+		correlationId?: string,
+	): Promise<number | null> {
 		try {
-			const corrId = correlationId || `corr_${Math.random().toString(36).substring(2, 9)}`;
+			const corrId =
+				correlationId || `corr_${Math.random().toString(36).substring(2, 9)}`;
 			const rows = await sql`
 				INSERT INTO audit_logs (
 					action,
@@ -36,7 +40,10 @@ export class DomainEventStore {
 			`;
 			return rows[0]?.id || null;
 		} catch (err) {
-			console.warn("Failed to persist event to DB, operating in fallback mode:", err);
+			console.warn(
+				"Failed to persist event to DB, operating in fallback mode:",
+				err,
+			);
 			return null;
 		}
 	}

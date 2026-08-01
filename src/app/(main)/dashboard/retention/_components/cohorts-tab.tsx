@@ -173,7 +173,7 @@ export function CohortsTab({ hasData }: { hasData: boolean }) {
 		);
 	}
 
-	const renderCell = (cohortCustomers: number, m: any) => {
+	const renderCell = (_cohortCustomers: number, m: any) => {
 		if (!m || m.activeCustomers === 0) {
 			return (
 				<TableCell

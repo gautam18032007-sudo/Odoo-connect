@@ -21,10 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { exportCustomerIntelligenceExcel } from "@/lib/customer-intelligence-export";
 import { useFilterStore } from "@/stores/founder/filter-store";
 import { tokens } from "@/styles/tokens";
-import type {
-	CustomerIntelligenceData,
-	CustomerIntelligenceResponse,
-} from "@/types/customer-intelligence";
+import type { CustomerIntelligenceResponse } from "@/types/customer-intelligence";
 
 interface StatusData {
 	hasData: boolean;
@@ -96,7 +93,7 @@ export default function Page() {
 		return null;
 	};
 
-	const { data, isInitialLoading, isRefreshing } = useStabilizedDashboard({
+	const { data } = useStabilizedDashboard({
 		fetcher,
 		enabled: Boolean(status?.hasData),
 		dependencies: [

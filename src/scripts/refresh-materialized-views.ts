@@ -1,6 +1,6 @@
+import path from "node:path";
 import { neon } from "@neondatabase/serverless";
 import * as dotenv from "dotenv";
-import path from "path";
 
 // Relative import (not @/): ts-node CommonJS doesn't resolve path aliases.
 import { refreshMaterializedViews } from "../lib/materialized-views";

@@ -1,6 +1,6 @@
+import path from "node:path";
 import { neon } from "@neondatabase/serverless";
 import * as dotenv from "dotenv";
-import path from "path";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
@@ -17,7 +17,9 @@ async function runLoadTest() {
 	const sql = neon(process.env.DATABASE_URL);
 	const concurrentUsers = 100;
 
-	console.log(`Simulating ${concurrentUsers} concurrent dashboard API read queries...`);
+	console.log(
+		`Simulating ${concurrentUsers} concurrent dashboard API read queries...`,
+	);
 
 	const startTime = Date.now();
 	const queries = [];
@@ -33,7 +35,7 @@ async function runLoadTest() {
 	}
 
 	try {
-		const results = await Promise.all(queries);
+		const _results = await Promise.all(queries);
 		const durationMs = Date.now() - startTime;
 		const avgLatencyMs = Math.round(durationMs / concurrentUsers);
 
@@ -41,7 +43,9 @@ async function runLoadTest() {
 		console.log(`   Total Queries: ${concurrentUsers}`);
 		console.log(`   Total Execution Duration: ${durationMs} ms`);
 		console.log(`   Average Latency per Query: ${avgLatencyMs} ms`);
-		console.log(`   Query Throughput: ${Math.round((concurrentUsers / durationMs) * 1000)} req/sec`);
+		console.log(
+			`   Query Throughput: ${Math.round((concurrentUsers / durationMs) * 1000)} req/sec`,
+		);
 	} catch (err: any) {
 		console.error("❌ LOAD TEST FAILED:", err.message);
 		process.exit(1);

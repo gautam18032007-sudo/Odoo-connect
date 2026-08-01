@@ -38,10 +38,17 @@ export function calculateLeadScore(input: LeadScoreInput): LeadScoreOutput {
 	else if (rev >= 5000) revenueFactor = 50;
 
 	// 2. Industry Fit Factor (15% weight)
-	const industryFactor = input.industryFit === "Retail Corporate" || input.industryFit === "Enterprise" ? 90 : 70;
+	const industryFactor =
+		input.industryFit === "Retail Corporate" ||
+		input.industryFit === "Enterprise"
+			? 90
+			: 70;
 
 	// 3. Source Quality Factor (15% weight)
-	const sourceFactor = input.sourceQuality === "Inbound Web" || input.sourceQuality === "Odoo CRM" ? 95 : 65;
+	const sourceFactor =
+		input.sourceQuality === "Inbound Web" || input.sourceQuality === "Odoo CRM"
+			? 95
+			: 65;
 
 	// 4. Engagement Recency Factor (15% weight)
 	const daysAgo = input.engagementRecencyDays ?? 0;

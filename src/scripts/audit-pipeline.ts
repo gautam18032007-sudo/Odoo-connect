@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Manually load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -37,7 +37,9 @@ async function main() {
 		WHERE date_order::date = '2026-07-31'::date
 		GROUP BY order_type, state
 	`;
-	console.log("1. fact_sales_orders grouped by (order_type, state) for 31 Jul 2026:");
+	console.log(
+		"1. fact_sales_orders grouped by (order_type, state) for 31 Jul 2026:",
+	);
 	console.table(orders31Jul);
 
 	// 2. Check total fact_sales_orders overall for 2026-07-31
@@ -107,7 +109,9 @@ async function main() {
 		WHERE fo.date_order::date = '2026-07-31'::date
 		  AND fl.id IS NULL
 	`;
-	console.log("\n6. fact_sales_orders for 31 Jul 2026 WITHOUT lines in fact_sales_lines:");
+	console.log(
+		"\n6. fact_sales_orders for 31 Jul 2026 WITHOUT lines in fact_sales_lines:",
+	);
 	console.table(ordersWithoutLines);
 
 	// 7. Timezone analysis: date_order in UTC vs Asia/Kolkata

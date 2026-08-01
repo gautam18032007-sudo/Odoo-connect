@@ -1,15 +1,8 @@
 "use client";
 
-import { Ellipsis } from "lucide-react";
 import { useMemo } from "react";
 
-import {
-	Card,
-	CardAction,
-	CardContent,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Table,
 	TableBody,
@@ -73,9 +66,9 @@ export function TopPages({ data }: { data: any }) {
 						</TableHeader>
 						<TableBody className="[&_tr]:border-border/50">
 							{pages.map((page: any, index: number) => (
-								// biome-ignore lint/suspicious/noArrayIndexKey: index is required to guarantee key uniqueness
 								<TableRow
 									className="hover:bg-muted/10"
+									// biome-ignore lint/suspicious/noArrayIndexKey: index used for guaranteed key uniqueness
 									key={`${page.path}-${index}`}
 								>
 									<TableCell className="max-w-[200px] truncate py-4 font-medium">

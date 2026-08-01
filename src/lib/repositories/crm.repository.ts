@@ -39,8 +39,10 @@ export async function getCrmLeads(filters?: {
 	salesperson?: string;
 }): Promise<CrmLead[]> {
 	try {
-		const stage = filters?.stage && filters.stage !== "ALL" ? filters.stage : null;
-		const store = filters?.store && filters.store !== "ALL" ? filters.store : null;
+		const stage =
+			filters?.stage && filters.stage !== "ALL" ? filters.stage : null;
+		const store =
+			filters?.store && filters.store !== "ALL" ? filters.store : null;
 		const search = filters?.search ? `%${filters.search.toLowerCase()}%` : null;
 
 		const rows = await sql`
@@ -112,7 +114,10 @@ export async function getCrmPipelineSummary(): Promise<CrmPipelineSummary> {
 
 		const stageCounts: Record<string, { count: number; value: number }> = {};
 		for (const row of stageRows) {
-			stageCounts[row.stage] = { count: Number(row.count), value: Number(row.value) };
+			stageCounts[row.stage] = {
+				count: Number(row.count),
+				value: Number(row.value),
+			};
 		}
 
 		const stat = rows[0] || {
@@ -206,7 +211,10 @@ export async function createCrmLead(data: {
 	}
 }
 
-export async function updateCrmLeadStage(id: number, stage: string): Promise<boolean> {
+export async function updateCrmLeadStage(
+	id: number,
+	stage: string,
+): Promise<boolean> {
 	try {
 		const won = stage === "Closed Won";
 		await sql`

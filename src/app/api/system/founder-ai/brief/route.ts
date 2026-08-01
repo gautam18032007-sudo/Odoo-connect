@@ -92,7 +92,10 @@ ${storeLeaderboard.length > 0 ? storeLeaderboard.map((s, i) => `${i + 1}. ${s.bi
 	} catch (error: any) {
 		console.error("Failed to generate Executive Brief:", error);
 		return NextResponse.json(
-			{ success: false, error: error.message || "Failed to generate Executive Brief" },
+			{
+				success: false,
+				error: error.message || "Failed to generate Executive Brief",
+			},
 			{ status: 500 },
 		);
 	}

@@ -4,7 +4,6 @@ import {
 	cleanDashboardFilters,
 	formatDateShort,
 	getComparisonPeriods,
-	getDefaultPeriod,
 } from "@/lib/business-logic/comparison";
 import { getStoreCommandDefaultPeriod } from "@/lib/business-logic/store-command-period";
 import { getStoreTrend } from "@/lib/business-logic/store-trend";

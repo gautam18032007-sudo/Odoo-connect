@@ -119,7 +119,8 @@ export class AlwaysOnSyncWorker {
 					}
 				} else {
 					// Adaptive polling calculation
-					const timeSinceLastChange = Date.now() - this.state.lastChangeTimestamp;
+					const timeSinceLastChange =
+						Date.now() - this.state.lastChangeTimestamp;
 					if (timeSinceLastChange > IDLE_THRESHOLD_MS) {
 						this.state.currentIntervalMs = SLOW_POLL_INTERVAL_MS;
 						this.state.lastStatus = "backing_off";
@@ -140,7 +141,7 @@ export class AlwaysOnSyncWorker {
 
 				// Error backoff: 5s, 10s, max 30s
 				const errorBackoff = Math.min(
-					5000 * Math.pow(2, this.state.consecutiveErrors - 1),
+					5000 * 2 ** (this.state.consecutiveErrors - 1),
 					30000,
 				);
 				this.state.currentIntervalMs = errorBackoff;

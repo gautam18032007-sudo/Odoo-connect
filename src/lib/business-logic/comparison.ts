@@ -100,7 +100,7 @@ export function formatDateShort(dateStr: string): string {
 		const day = parseInt(d, 10);
 		const month = months[parseInt(m, 10) - 1];
 		return `${day} ${month} ${y}`;
-	} catch (e) {
+	} catch (_e) {
 		return dateStr;
 	}
 }
@@ -147,7 +147,10 @@ export function growthPct(current: number, previous: number): number | null {
 	return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
-export function calculateGrowth(current: number, previous: number): number | null {
+export function calculateGrowth(
+	current: number,
+	previous: number,
+): number | null {
 	return growthPct(current, previous);
 }
 

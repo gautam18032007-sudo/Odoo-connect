@@ -1,5 +1,5 @@
-import { useFilterStore } from "@/stores/founder/filter-store";
 import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
+import { useFilterStore } from "@/stores/founder/filter-store";
 
 export function useSegments(hasData: boolean) {
 	const { startDate, endDate, store, categoryScope } = useFilterStore();

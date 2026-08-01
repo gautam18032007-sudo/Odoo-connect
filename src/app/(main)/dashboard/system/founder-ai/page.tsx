@@ -1,22 +1,14 @@
 "use client";
 
 import {
-	Activity,
 	AlertCircle,
-	ArrowUpRight,
 	Bot,
-	Boxes,
-	CheckCircle2,
 	Copy,
-	DollarSign,
-	IndianRupee,
 	RefreshCw,
-	ShieldAlert,
 	Store,
 	TrendingUp,
-	Zap,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,7 +58,7 @@ export default function FounderAiOpsPage() {
 	const [error, setError] = useState<string | null>(null);
 	const [copied, setCopied] = useState(false);
 
-	const fetchOps = async () => {
+	const fetchOps = useCallback(async () => {
 		try {
 			const res = await fetch("/api/system/founder-ai");
 			const json = await res.json();
@@ -76,12 +68,12 @@ export default function FounderAiOpsPage() {
 			} else {
 				setError(json.error || "Failed to load Founder AI Ops");
 			}
-		} catch (err: any) {
-			setError(err.message || "Network error");
+		} catch (err: unknown) {
+			setError(err instanceof Error ? err.message : "Network error");
 		} finally {
 			setLoading(false);
 		}
-	};
+	}, []);
 
 	const copyMorningBrief = async () => {
 		try {
@@ -99,7 +91,7 @@ export default function FounderAiOpsPage() {
 
 	useEffect(() => {
 		fetchOps();
-	}, []);
+	}, [fetchOps]);
 
 	if (loading) {
 		return (
@@ -134,22 +126,38 @@ export default function FounderAiOpsPage() {
 			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 				<div>
 					<div className="flex items-center gap-2">
-						<h1 className="text-3xl font-bold tracking-tight">Founder AI Operations Panel</h1>
-						<Badge variant="outline" className="bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 gap-1 font-mono text-xs">
+						<h1 className="text-3xl font-bold tracking-tight">
+							Founder AI Operations Panel
+						</h1>
+						<Badge
+							variant="outline"
+							className="bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 gap-1 font-mono text-xs"
+						>
 							<Bot className="size-3.5 fill-violet-500" />
 							Executive Ops AI
 						</Badge>
 					</div>
 					<p className="text-muted-foreground text-sm mt-1">
-						Real-Time Sales Performance, Store Leaderboards & Automated Inventory Margin Safeguards
+						Real-Time Sales Performance, Store Leaderboards & Automated
+						Inventory Margin Safeguards
 					</p>
 				</div>
 				<div className="flex items-center gap-2">
-					<Button variant="default" size="sm" onClick={copyMorningBrief} className="gap-2 bg-violet-600 hover:bg-violet-700 text-white shadow-sm">
+					<Button
+						variant="default"
+						size="sm"
+						onClick={copyMorningBrief}
+						className="gap-2 bg-violet-600 hover:bg-violet-700 text-white shadow-sm"
+					>
 						<Copy className="size-4" />
 						{copied ? "Brief Copied!" : "Copy Morning Brief"}
 					</Button>
-					<Button variant="outline" size="sm" onClick={fetchOps} className="gap-2 shadow-sm">
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={fetchOps}
+						className="gap-2 shadow-sm"
+					>
 						<RefreshCw className="size-4" />
 						Refresh
 					</Button>
@@ -160,10 +168,14 @@ export default function FounderAiOpsPage() {
 			<div className="grid gap-4 sm:grid-cols-3">
 				<Card className="border-l-4 border-l-emerald-500 shadow-sm hover:shadow-md transition-shadow">
 					<CardHeader className="pb-2">
-						<CardTitle className="text-sm font-medium text-muted-foreground">Today&apos;s Live Revenue</CardTitle>
+						<CardTitle className="text-sm font-medium text-muted-foreground">
+							Today&apos;s Live Revenue
+						</CardTitle>
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{formatCurrency(today.revenue)}</div>
+						<div className="text-2xl font-bold">
+							{formatCurrency(today.revenue)}
+						</div>
 						<p className="text-xs text-muted-foreground mt-1 font-mono">
 							{today.bills} Orders • {today.units} Units Sold
 						</p>
@@ -172,10 +184,14 @@ export default function FounderAiOpsPage() {
 
 				<Card className="border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-shadow">
 					<CardHeader className="pb-2">
-						<CardTitle className="text-sm font-medium text-muted-foreground">Total Inventory Valuation</CardTitle>
+						<CardTitle className="text-sm font-medium text-muted-foreground">
+							Total Inventory Valuation
+						</CardTitle>
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{formatCurrency(inventory.totalInventoryValueMrp)}</div>
+						<div className="text-2xl font-bold">
+							{formatCurrency(inventory.totalInventoryValueMrp)}
+						</div>
 						<p className="text-xs text-muted-foreground mt-1 font-mono">
 							{inventory.totalSohQty.toLocaleString()} units on hand
 						</p>
@@ -184,14 +200,22 @@ export default function FounderAiOpsPage() {
 
 				<Card className="border-l-4 border-l-violet-500 shadow-sm hover:shadow-md transition-shadow">
 					<CardHeader className="pb-2">
-						<CardTitle className="text-sm font-medium text-muted-foreground">Inventory Stock Health</CardTitle>
+						<CardTitle className="text-sm font-medium text-muted-foreground">
+							Inventory Stock Health
+						</CardTitle>
 					</CardHeader>
 					<CardContent>
 						<div className="flex items-center gap-2">
-							<span className="text-2xl font-bold font-mono">{inventory.healthyStockCount}</span>
-							<span className="text-xs text-emerald-600 font-semibold">Healthy</span>
+							<span className="text-2xl font-bold font-mono">
+								{inventory.healthyStockCount}
+							</span>
+							<span className="text-xs text-emerald-600 font-semibold">
+								Healthy
+							</span>
 							<span className="text-xs text-muted-foreground">•</span>
-							<span className="text-xs text-amber-600 font-semibold">{inventory.lowStockCount} Low</span>
+							<span className="text-xs text-amber-600 font-semibold">
+								{inventory.lowStockCount} Low
+							</span>
 						</div>
 						<p className="text-xs text-destructive mt-1 font-medium font-mono">
 							{inventory.deadStockCount} Dead Stock items
@@ -208,16 +232,25 @@ export default function FounderAiOpsPage() {
 							<Store className="size-5 text-primary" />
 							Store Revenue Leaderboard
 						</CardTitle>
-						<CardDescription>Live revenue & order distribution across stores</CardDescription>
+						<CardDescription>
+							Live revenue & order distribution across stores
+						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
 						{storeRanking.map((store, i) => (
-							<div key={store.storeName} className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
+							<div
+								key={store.storeName}
+								className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0"
+							>
 								<div className="flex items-center gap-3">
-									<Badge className="bg-primary text-primary-foreground font-mono">#{i + 1}</Badge>
+									<Badge className="bg-primary text-primary-foreground font-mono">
+										#{i + 1}
+									</Badge>
 									<div>
 										<p className="font-semibold text-sm">{store.storeName}</p>
-										<p className="text-xs text-muted-foreground font-mono">{store.bills} orders</p>
+										<p className="text-xs text-muted-foreground font-mono">
+											{store.bills} orders
+										</p>
 									</div>
 								</div>
 								<div className="text-right font-mono font-bold">
@@ -234,14 +267,23 @@ export default function FounderAiOpsPage() {
 							<TrendingUp className="size-5 text-emerald-500" />
 							Top Performing Products
 						</CardTitle>
-						<CardDescription>Highest revenue generators across all locations</CardDescription>
+						<CardDescription>
+							Highest revenue generators across all locations
+						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
 						{topProducts.map((p) => (
-							<div key={p.sku} className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0 text-sm">
+							<div
+								key={p.sku}
+								className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0 text-sm"
+							>
 								<div>
-									<p className="font-semibold truncate max-w-[220px]">{p.name}</p>
-									<p className="text-xs text-muted-foreground font-mono">{p.sku} • {p.unitsSold} units</p>
+									<p className="font-semibold truncate max-w-[220px]">
+										{p.name}
+									</p>
+									<p className="text-xs text-muted-foreground font-mono">
+										{p.sku} • {p.unitsSold} units
+									</p>
 								</div>
 								<div className="text-right font-mono font-bold">
 									{formatCurrency(p.revenue)}

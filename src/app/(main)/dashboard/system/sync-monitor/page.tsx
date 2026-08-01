@@ -4,17 +4,14 @@ import {
 	Activity,
 	AlertCircle,
 	Boxes,
-	CheckCircle2,
 	Clock,
-	Database,
 	Layers,
-	Package,
 	RefreshCw,
 	Server,
 	ShieldCheck,
 	Zap,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +21,6 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface SyncMonitorData {
@@ -70,7 +66,7 @@ export default function SyncMonitorPage() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
-	const fetchMonitor = async () => {
+	const fetchMonitor = useCallback(async () => {
 		try {
 			const res = await fetch("/api/system/sync-monitor");
 			const json = await res.json();
@@ -80,18 +76,18 @@ export default function SyncMonitorPage() {
 			} else {
 				setError(json.error || "Failed to load monitor data");
 			}
-		} catch (err: any) {
-			setError(err.message || "Network error");
+		} catch (err: unknown) {
+			setError(err instanceof Error ? err.message : "Network error");
 		} finally {
 			setLoading(false);
 		}
-	};
+	}, []);
 
 	useEffect(() => {
 		fetchMonitor();
 		const interval = setInterval(fetchMonitor, 3000); // 3-second live refresh
 		return () => clearInterval(interval);
-	}, []);
+	}, [fetchMonitor]);
 
 	if (loading) {
 		return (
@@ -126,8 +122,13 @@ export default function SyncMonitorPage() {
 			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 				<div>
 					<div className="flex items-center gap-2">
-						<h1 className="text-3xl font-bold tracking-tight">Production Sync Monitor</h1>
-						<Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1">
+						<h1 className="text-3xl font-bold tracking-tight">
+							Production Sync Monitor
+						</h1>
+						<Badge
+							variant="outline"
+							className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1"
+						>
 							<Zap className="size-3 fill-emerald-500" />
 							Real-Time Observability
 						</Badge>
@@ -136,7 +137,12 @@ export default function SyncMonitorPage() {
 						Live Worker Telemetry, Entity Queues & End-to-End Latency Metrics
 					</p>
 				</div>
-				<Button variant="outline" size="sm" onClick={fetchMonitor} className="gap-2">
+				<Button
+					variant="outline"
+					size="sm"
+					onClick={fetchMonitor}
+					className="gap-2"
+				>
 					<RefreshCw className="size-4" />
 					Refresh
 				</Button>
@@ -154,7 +160,9 @@ export default function SyncMonitorPage() {
 							<Badge className="bg-emerald-500 text-white">
 								{worker.isRunning ? "RUNNING" : "STOPPED"}
 							</Badge>
-							<span className="text-xs text-muted-foreground">{worker.currentIntervalMs / 1000}s interval</span>
+							<span className="text-xs text-muted-foreground">
+								{worker.currentIntervalMs / 1000}s interval
+							</span>
 						</div>
 						<p className="text-xs text-muted-foreground mt-2">
 							Total Synced: {worker.totalRecordsSynced.toLocaleString()} records
@@ -164,11 +172,15 @@ export default function SyncMonitorPage() {
 
 				<Card className="border-l-4 border-l-blue-500">
 					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<CardTitle className="text-sm font-medium">Queue & Retries</CardTitle>
+						<CardTitle className="text-sm font-medium">
+							Queue & Retries
+						</CardTitle>
 						<Layers className="size-4 text-blue-500" />
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{worker.activeJobCount} pending</div>
+						<div className="text-2xl font-bold">
+							{worker.activeJobCount} pending
+						</div>
 						<p className="text-xs text-muted-foreground mt-1">
 							Dead-Letter Queue: {worker.deadLetterCount} jobs
 						</p>
@@ -195,7 +207,10 @@ export default function SyncMonitorPage() {
 					</CardHeader>
 					<CardContent>
 						<div className="flex items-center gap-2">
-							<Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600">
+							<Badge
+								variant="outline"
+								className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600"
+							>
 								HEALTHY
 							</Badge>
 						</div>
@@ -214,19 +229,32 @@ export default function SyncMonitorPage() {
 							<Boxes className="size-5 text-primary" />
 							Entity Sync Breakdown
 						</CardTitle>
-						<CardDescription>Processed batches and lifetime record counts per entity</CardDescription>
+						<CardDescription>
+							Processed batches and lifetime record counts per entity
+						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
 						{entitySummary.map((ent) => (
-							<div key={ent.entity} className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
+							<div
+								key={ent.entity}
+								className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0"
+							>
 								<div>
-									<p className="font-semibold text-sm capitalize">{ent.entity.replace("_", " ")}</p>
-									<p className="text-xs text-muted-foreground">{ent.totalBatches} batches processed</p>
+									<p className="font-semibold text-sm capitalize">
+										{ent.entity.replace("_", " ")}
+									</p>
+									<p className="text-xs text-muted-foreground">
+										{ent.totalBatches} batches processed
+									</p>
 								</div>
 								<div className="text-right">
-									<p className="font-mono text-sm font-bold">{ent.totalRecords.toLocaleString()} recs</p>
+									<p className="font-mono text-sm font-bold">
+										{ent.totalRecords.toLocaleString()} recs
+									</p>
 									<span className="text-[10px] text-muted-foreground font-mono">
-										{ent.lastSyncAt ? new Date(ent.lastSyncAt).toLocaleTimeString() : "N/A"}
+										{ent.lastSyncAt
+											? new Date(ent.lastSyncAt).toLocaleTimeString()
+											: "N/A"}
 									</span>
 								</div>
 							</div>
@@ -240,20 +268,34 @@ export default function SyncMonitorPage() {
 							<Clock className="size-5 text-blue-500" />
 							Live Telemetry Trace Logs
 						</CardTitle>
-						<CardDescription>End-to-end trace IDs and latency metrics for recent sync runs</CardDescription>
+						<CardDescription>
+							End-to-end trace IDs and latency metrics for recent sync runs
+						</CardDescription>
 					</CardHeader>
 					<CardContent>
 						<div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
 							{recentLogs.map((log) => (
-								<div key={log.id} className="p-3 border rounded-lg bg-muted/20 text-xs space-y-1">
+								<div
+									key={log.id}
+									className="p-3 border rounded-lg bg-muted/20 text-xs space-y-1"
+								>
 									<div className="flex items-center justify-between font-mono font-semibold">
 										<span className="text-primary">{log.traceId}</span>
-										<Badge variant="outline" className={log.status === "success" ? "border-emerald-500/30 text-emerald-600" : "border-destructive/30 text-destructive"}>
+										<Badge
+											variant="outline"
+											className={
+												log.status === "success"
+													? "border-emerald-500/30 text-emerald-600"
+													: "border-destructive/30 text-destructive"
+											}
+										>
 											{log.status.toUpperCase()}
 										</Badge>
 									</div>
 									<div className="flex justify-between text-muted-foreground">
-										<span className="capitalize">{log.syncType} • {log.recordsProcessed} recs</span>
+										<span className="capitalize">
+											{log.syncType} • {log.recordsProcessed} recs
+										</span>
 										<span>Duration: {log.durationMs}ms</span>
 									</div>
 								</div>

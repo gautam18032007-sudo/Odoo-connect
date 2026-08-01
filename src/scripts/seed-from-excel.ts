@@ -1,7 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
 import { neon } from "@neondatabase/serverless";
 import * as dotenv from "dotenv";
-import fs from "fs";
-import path from "path";
 import { commitFounderUploadFile } from "../lib/founder/import-service";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });

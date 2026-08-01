@@ -50,7 +50,7 @@ const revenueOverviewConfig = {
 function formatMonthTick(value: string) {
 	try {
 		const date = new Date(value);
-		if (isNaN(date.getTime())) return value;
+		if (Number.isNaN(date.getTime())) return value;
 		// Only display label for every few days or middle of the month to avoid overcrowding
 		return format(date, "d MMM");
 	} catch {
@@ -61,7 +61,7 @@ function formatMonthTick(value: string) {
 function formatTooltipLabel(value: string) {
 	try {
 		const date = new Date(value);
-		if (isNaN(date.getTime())) return value;
+		if (Number.isNaN(date.getTime())) return value;
 		return format(date, "PPPP");
 	} catch {
 		return value;

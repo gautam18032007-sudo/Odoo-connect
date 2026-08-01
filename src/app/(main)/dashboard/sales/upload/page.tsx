@@ -98,7 +98,7 @@ export default function FounderUploadPage() {
 			}
 		} catch (err: any) {
 			console.error(err);
-			toast.error("Failed to parse file: " + err.message);
+			toast.error(`Failed to parse file: ${err.message}`);
 		} finally {
 			setProgress(100);
 			setIsProcessing(false);
@@ -136,7 +136,7 @@ export default function FounderUploadPage() {
 				toast.error(data.error || "Failed to commit data");
 			}
 		} catch (err: any) {
-			toast.error("Upload failed: " + err.message);
+			toast.error(`Upload failed: ${err.message}`);
 		} finally {
 			setIsProcessing(false);
 		}

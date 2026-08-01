@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -21,7 +21,9 @@ async function main() {
 	const { sql } = await import("../lib/db");
 	const { OdooClient } = await import("../lib/odoo/client");
 
-	console.log("=== FINDING THE 5 REMAINING MISSING BILLS FOR 31 JUL 2026 IST ===");
+	console.log(
+		"=== FINDING THE 5 REMAINING MISSING BILLS FOR 31 JUL 2026 IST ===",
+	);
 
 	const client = new OdooClient();
 	if (client.getMockModeStatus()) return;
@@ -31,14 +33,19 @@ async function main() {
 	const istEndUtc = "2026-07-31 18:29:59";
 
 	// 1. Fetch all 161 orders from Odoo for 31 Jul IST
-	const odooOrders = await client.callKw<any[]>("pos.order", "search_read", [], {
-		domain: [
-			["state", "in", ["paid", "done", "invoiced"]],
-			["date_order", ">=", istStartUtc],
-			["date_order", "<=", istEndUtc],
-		],
-		fields: ["id", "name", "date_order", "amount_total", "lines"],
-	});
+	const odooOrders = await client.callKw<any[]>(
+		"pos.order",
+		"search_read",
+		[],
+		{
+			domain: [
+				["state", "in", ["paid", "done", "invoiced"]],
+				["date_order", ">=", istStartUtc],
+				["date_order", "<=", istEndUtc],
+			],
+			fields: ["id", "name", "date_order", "amount_total", "lines"],
+		},
+	);
 	console.log(`Odoo orders count: ${odooOrders.length}`);
 
 	// 2. Fetch all bills in sales_fact_v for 31 Jul IST
@@ -52,7 +59,15 @@ async function main() {
 	// 3. Find the missing orders in Odoo that are not in sales_fact_v
 	const missingFromView = odooOrders.filter((o) => !viewBillNames.has(o.name));
 	console.log(`\nMissing Orders (${missingFromView.length}):`);
-	console.table(missingFromView.map((o) => ({ id: o.id, name: o.name, date_order: o.date_order, amount: o.amount_total, linesCount: o.lines?.length })));
+	console.table(
+		missingFromView.map((o) => ({
+			id: o.id,
+			name: o.name,
+			date_order: o.date_order,
+			amount: o.amount_total,
+			linesCount: o.lines?.length,
+		})),
+	);
 
 	// 4. For each missing order, check if it exists in fact_sales_orders and why its lines/view entry are missing
 	for (const o of missingFromView) {

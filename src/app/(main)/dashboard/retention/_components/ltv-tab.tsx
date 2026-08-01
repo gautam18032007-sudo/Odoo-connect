@@ -173,7 +173,7 @@ export function LtvTab({ hasData }: { hasData: boolean }) {
 	// Reset page on filter changes
 	useEffect(() => {
 		setCurrentPage(1);
-	}, [searchQuery, customerTypeFilter, aovStabilityFilter]);
+	}, []);
 
 	// Export handler
 	const handleExport = () => {

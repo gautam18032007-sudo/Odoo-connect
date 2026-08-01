@@ -6,22 +6,23 @@ export const runtime = "nodejs";
 
 export async function GET() {
 	try {
-		const [salesResult, syncResult, countsResult, telemetry] = await Promise.all([
-			sql`SELECT MAX(sale_date) as latest_sale_date FROM sales_fact_v`,
-			sql`
+		const [salesResult, syncResult, countsResult, telemetry] =
+			await Promise.all([
+				sql`SELECT MAX(sale_date) as latest_sale_date FROM sales_fact_v`,
+				sql`
 				SELECT COALESCE(
 					(SELECT MAX(completed_at) FROM sync_telemetry WHERE status = 'success'),
 					(SELECT MAX(uploaded_at) FROM upload_batches WHERE status = 'success')
 				) as last_uploaded_at
 			`,
-			sql`
+				sql`
 				SELECT COUNT(*)::int AS total_rows,
 					COUNT(DISTINCT bill_no)::int AS total_bills,
 					COALESCE(SUM(net_amount), 0) AS total_revenue
 				FROM sales_fact_v
 			`,
-			getLatestTelemetryStatus(),
-		]);
+				getLatestTelemetryStatus(),
+			]);
 
 		const latestSaleDate = salesResult[0]?.latest_sale_date || null;
 		const lastUploadedAt = syncResult[0]?.last_uploaded_at || null;
@@ -50,7 +51,8 @@ export async function GET() {
 				totalRevenue,
 				status: telemetry.overallStatus,
 				secondsAgo: telemetry.maxSecondsAgo,
-				isStale: telemetry.maxSecondsAgo === null || telemetry.maxSecondsAgo > 60,
+				isStale:
+					telemetry.maxSecondsAgo === null || telemetry.maxSecondsAgo > 60,
 				entityStatuses: telemetry.entityStatuses,
 			},
 		});

@@ -1,23 +1,17 @@
 "use client";
 
 import {
-	AlertCircle,
 	ArrowUpRight,
 	BarChart3,
 	CheckCircle2,
 	DollarSign,
-	FileSpreadsheet,
 	IndianRupee,
-	Loader2,
 	Package,
 	Receipt,
 	Store,
 	TrendingDown,
 	TrendingUp,
-	Upload,
-	UploadCloud,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
 import {
 	Area,
 	AreaChart,
@@ -31,7 +25,6 @@ import {
 	YAxis,
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
 	Card,
 	CardContent,
@@ -39,15 +32,6 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogHeader,
-	DialogTitle,
-	DialogTrigger,
-} from "@/components/ui/dialog";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils";
 
@@ -127,7 +111,10 @@ function CustomTooltip({ active, payload, label }: any) {
 
 function NetPurchaseSyncBadge() {
 	return (
-		<Badge variant="outline" className="gap-1.5 py-1 px-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+		<Badge
+			variant="outline"
+			className="gap-1.5 py-1 px-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+		>
 			<CheckCircle2 className="size-3.5" />
 			Odoo Live Ledger
 		</Badge>
@@ -444,12 +431,14 @@ export default function NetPurchaseDashboardPage() {
 												name="Net Purchase"
 												radius={[0, 6, 6, 0]}
 											>
-												{summaryData.byStore.map((s: { store: string }, idx: number) => (
-													<Cell
-														key={s.store || `store-${idx}`}
-														fill={STORE_COLORS[idx % STORE_COLORS.length]}
-													/>
-												))}
+												{summaryData.byStore.map(
+													(s: { store: string }, idx: number) => (
+														<Cell
+															key={s.store || `store-${idx}`}
+															fill={STORE_COLORS[idx % STORE_COLORS.length]}
+														/>
+													),
+												)}
 											</Bar>
 										</BarChart>
 									</ResponsiveContainer>
@@ -477,41 +466,49 @@ export default function NetPurchaseDashboardPage() {
 							</CardHeader>
 							<CardContent>
 								<div className="space-y-3">
-									{summaryData.byCategory.slice(0, 8).map((cat: { category: string; net_purchase: number }, idx: number) => {
-										const maxVal = Math.max(
-											...summaryData.byCategory.map((c: { net_purchase: number }) =>
-												Number(c.net_purchase),
-											),
-										);
-										const pct =
-											maxVal > 0
-												? (Number(cat.net_purchase) / maxVal) * 100
-												: 0;
-										return (
-											<div key={cat.category} className="space-y-1.5">
-												<div className="flex items-center justify-between">
-													<span className="font-medium text-sm">
-														{cat.category}
-													</span>
-													<span className="tabular-nums text-muted-foreground text-sm">
-														{formatCurrency(Number(cat.net_purchase), {
-															noDecimals: true,
-														})}
-													</span>
-												</div>
-												<div className="h-2 overflow-hidden rounded-full bg-muted/30">
-													<div
-														className="h-full rounded-full transition-all duration-500"
-														style={{
-															width: `${pct}%`,
-															background:
-																STORE_COLORS[idx % STORE_COLORS.length],
-														}}
-													/>
-												</div>
-											</div>
-										);
-									})}
+									{summaryData.byCategory
+										.slice(0, 8)
+										.map(
+											(
+												cat: { category: string; net_purchase: number },
+												idx: number,
+											) => {
+												const maxVal = Math.max(
+													...summaryData.byCategory.map(
+														(c: { net_purchase: number }) =>
+															Number(c.net_purchase),
+													),
+												);
+												const pct =
+													maxVal > 0
+														? (Number(cat.net_purchase) / maxVal) * 100
+														: 0;
+												return (
+													<div key={cat.category} className="space-y-1.5">
+														<div className="flex items-center justify-between">
+															<span className="font-medium text-sm">
+																{cat.category}
+															</span>
+															<span className="tabular-nums text-muted-foreground text-sm">
+																{formatCurrency(Number(cat.net_purchase), {
+																	noDecimals: true,
+																})}
+															</span>
+														</div>
+														<div className="h-2 overflow-hidden rounded-full bg-muted/30">
+															<div
+																className="h-full rounded-full transition-all duration-500"
+																style={{
+																	width: `${pct}%`,
+																	background:
+																		STORE_COLORS[idx % STORE_COLORS.length],
+																}}
+															/>
+														</div>
+													</div>
+												);
+											},
+										)}
 									{summaryData.byCategory.length === 0 && (
 										<p className="py-8 text-center text-muted-foreground text-sm">
 											No category data available

@@ -105,7 +105,10 @@ export async function GET() {
 			},
 		});
 	} catch (error: any) {
-		console.warn("Failed to fetch founder status (returning fallback status):", error?.message || error);
+		console.warn(
+			"Failed to fetch founder status (returning fallback status):",
+			error?.message || error,
+		);
 		return NextResponse.json({
 			success: true,
 			data: emptyStatus(),

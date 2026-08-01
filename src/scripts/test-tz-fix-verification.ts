@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -19,9 +19,10 @@ if (fs.existsSync(envPath)) {
 
 function parseOdooDateToIso(dateStr: string | false | null): string {
 	if (!dateStr) return new Date().toISOString();
-	const formatted = dateStr.includes("Z") || dateStr.includes("+")
-		? dateStr
-		: `${dateStr.replace(" ", "T")}Z`;
+	const formatted =
+		dateStr.includes("Z") || dateStr.includes("+")
+			? dateStr
+			: `${dateStr.replace(" ", "T")}Z`;
 	return new Date(formatted).toISOString();
 }
 
@@ -29,7 +30,9 @@ async function main() {
 	const { sql } = await import("../lib/db");
 	const { OdooClient } = await import("../lib/odoo/client");
 
-	console.log("=== TESTING PARSE_ODOO_DATE_TO_ISO & AT TIME ZONE 'Asia/Kolkata' ===");
+	console.log(
+		"=== TESTING PARSE_ODOO_DATE_TO_ISO & AT TIME ZONE 'Asia/Kolkata' ===",
+	);
 
 	const client = new OdooClient();
 	if (client.getMockModeStatus()) return;
@@ -39,19 +42,29 @@ async function main() {
 	const istStartUtc = "2026-07-30 18:30:00";
 	const istEndUtc = "2026-07-31 18:29:59";
 
-	const posOrdersOdoo = await client.callKw<any[]>("pos.order", "search_read", [], {
-		domain: [
-			["state", "in", ["paid", "done", "invoiced"]],
-			["date_order", ">=", istStartUtc],
-			["date_order", "<=", istEndUtc],
-		],
-		fields: ["id", "name", "date_order", "amount_total"],
-	});
+	const posOrdersOdoo = await client.callKw<any[]>(
+		"pos.order",
+		"search_read",
+		[],
+		{
+			domain: [
+				["state", "in", ["paid", "done", "invoiced"]],
+				["date_order", ">=", istStartUtc],
+				["date_order", "<=", istEndUtc],
+			],
+			fields: ["id", "name", "date_order", "amount_total"],
+		},
+	);
 
-	console.log(`Odoo POS Orders for 31 Jul 2026 IST: Count = ${posOrdersOdoo.length}`);
+	console.log(
+		`Odoo POS Orders for 31 Jul 2026 IST: Count = ${posOrdersOdoo.length}`,
+	);
 	const sampleOdoo = posOrdersOdoo[0];
 	console.log("Sample Odoo date_order:", sampleOdoo.date_order);
-	console.log("Parsed ISO string with 'Z' suffix:", parseOdooDateToIso(sampleOdoo.date_order));
+	console.log(
+		"Parsed ISO string with 'Z' suffix:",
+		parseOdooDateToIso(sampleOdoo.date_order),
+	);
 
 	// 2. Test SQL conversion with correct expression: (date_order AT TIME ZONE 'Asia/Kolkata')::date
 	const testSql = await sql`

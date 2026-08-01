@@ -21,9 +21,9 @@
  * ============================================================================
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as dotenv from "dotenv";
-import * as fs from "fs";
-import * as path from "path";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
@@ -102,7 +102,7 @@ function log(msg: string) {
 	output.push(msg);
 }
 function section(title: string) {
-	log("\n" + "═".repeat(78));
+	log(`\n${"═".repeat(78)}`);
 	log(`  ${title}`);
 	log("═".repeat(78));
 }
@@ -348,7 +348,7 @@ async function auditCustomerIdentity() {
 			: null;
 		if (m && m.length >= 10) {
 			if (!mobileMap.has(m)) mobileMap.set(m, []);
-			mobileMap.get(m)!.push(p);
+			mobileMap.get(m)?.push(p);
 		}
 	}
 	const mobileDupes = [...mobileMap.entries()].filter(([, v]) => v.length > 1);
@@ -366,9 +366,9 @@ async function auditCustomerIdentity() {
 	const emailMap = new Map<string, any[]>();
 	for (const p of allCustomers) {
 		const e = p.email ? String(p.email).toLowerCase().trim() : null;
-		if (e && e.includes("@")) {
+		if (e?.includes("@")) {
 			if (!emailMap.has(e)) emailMap.set(e, []);
-			emailMap.get(e)!.push(p);
+			emailMap.get(e)?.push(p);
 		}
 	}
 	const emailDupes = [...emailMap.entries()].filter(([, v]) => v.length > 1);
@@ -917,8 +917,8 @@ async function auditProductIdentity() {
 async function main() {
 	console.log("═".repeat(78));
 	console.log("  PHASE 2.8 — Business Semantics & Identity Audit");
-	console.log("  Target: " + ODOO_URL);
-	console.log("  Date: " + new Date().toISOString());
+	console.log(`  Target: ${ODOO_URL}`);
+	console.log(`  Date: ${new Date().toISOString()}`);
 	console.log("═".repeat(78));
 
 	await authenticate();

@@ -88,7 +88,11 @@ export class WorkflowEngine {
 
 		// Validate required fields for transition
 		for (const field of config.requiredFields) {
-			if (payload[field] === undefined || payload[field] === null || payload[field] === "") {
+			if (
+				payload[field] === undefined ||
+				payload[field] === null ||
+				payload[field] === ""
+			) {
 				return {
 					valid: false,
 					error: `Missing required field '${field}' for transition to '${nextState}'`,

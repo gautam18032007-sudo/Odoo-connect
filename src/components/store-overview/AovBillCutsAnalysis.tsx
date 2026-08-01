@@ -54,7 +54,7 @@ export function AovBillCutsAnalysis({ stores }: AovBillCutsAnalysisProps) {
 
 	// Extract period labels from the first store that has history
 	const firstStore = stores.find(
-		(s) => s.aovBills && s.aovBills.periods && s.aovBills.periods.length > 0,
+		(s) => s.aovBills?.periods && s.aovBills.periods.length > 0,
 	);
 	const labels = {
 		current: firstStore?.aovBills?.periods[0]?.label || "Current",

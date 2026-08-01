@@ -3,7 +3,7 @@ import { sql } from "@/lib/db";
 
 export const runtime = "nodejs";
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
 	try {
 		// 1. Total rows in sales_fact
 		const totalRowsResult = await sql`
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
 		const duplicateBillsCount = duplicateBillsResult[0]?.count || 0;
 
 		// 7. Invalid stores (billed_by values that are not whitelisted)
-		const whitelist = ["SmartworksNoida Noida", "Klj store"];
+		const _whitelist = ["SmartworksNoida Noida", "Klj store"];
 		const invalidStoresResult = await sql`
 			SELECT billed_by as name, COUNT(*)::int as count
 			FROM sales_fact

@@ -23,9 +23,9 @@
  * ============================================================================
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as dotenv from "dotenv";
-import * as fs from "fs";
-import * as path from "path";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
@@ -1034,7 +1034,7 @@ async function auditModel(target: ModelAuditTarget): Promise<ModelAuditResult> {
 	} catch (err: any) {
 		result.canRead = false;
 		result.error =
-			(result.error ? result.error + " | " : "") +
+			(result.error ? `${result.error} | ` : "") +
 			`search_read failed: ${err.message}`;
 	}
 
@@ -1145,8 +1145,8 @@ async function main() {
 	console.log(
 		"  ZenZebra — Odoo 19 Enterprise Module Capability & Automation Audit",
 	);
-	console.log("  Target: " + ODOO_URL);
-	console.log("  Date: " + new Date().toISOString());
+	console.log(`  Target: ${ODOO_URL}`);
+	console.log(`  Date: ${new Date().toISOString()}`);
 	console.log("═".repeat(78));
 
 	if (!ODOO_URL || !ODOO_DB || !ODOO_USERNAME || !ODOO_PASSWORD) {
@@ -1224,7 +1224,7 @@ async function main() {
 	}
 
 	// ── Phase 3: Generate summary ──
-	console.log("\n" + "═".repeat(78));
+	console.log(`\n${"═".repeat(78)}`);
 	console.log("  CAPABILITY MATRIX SUMMARY");
 	console.log("═".repeat(78));
 
@@ -1240,7 +1240,7 @@ async function main() {
 			"Records".padEnd(10) +
 			"Priority",
 	);
-	console.log("  " + "─".repeat(86));
+	console.log(`  ${"─".repeat(86)}`);
 
 	for (const r of results) {
 		const yn = (b: boolean) => (b ? "✅" : "❌");
@@ -1269,7 +1269,7 @@ async function main() {
 	);
 	const notAccessible = results.filter((r) => !r.accessible);
 
-	console.log("\n" + "═".repeat(78));
+	console.log(`\n${"═".repeat(78)}`);
 	console.log("  AGGREGATE STATISTICS");
 	console.log("═".repeat(78));
 	console.log(`  Total Models Audited:       ${results.length}`);
@@ -1301,7 +1301,7 @@ async function main() {
 	// ── Customer Intelligence Summary ──
 	const partnerResult = results.find((r) => r.model === "res.partner");
 	const posOrderResult = results.find((r) => r.model === "pos.order");
-	console.log("\n" + "═".repeat(78));
+	console.log(`\n${"═".repeat(78)}`);
 	console.log("  CUSTOMER INTELLIGENCE CAPABILITIES");
 	console.log("═".repeat(78));
 	const ciFields = [
@@ -1324,7 +1324,7 @@ async function main() {
 	// ── Inventory Intelligence Summary ──
 	const stockQuant = results.find((r) => r.model === "stock.quant");
 	const stockMove = results.find((r) => r.model === "stock.move");
-	console.log("\n" + "═".repeat(78));
+	console.log(`\n${"═".repeat(78)}`);
 	console.log("  INVENTORY INTELLIGENCE CAPABILITIES");
 	console.log("═".repeat(78));
 	const invFeatures = [
@@ -1344,7 +1344,7 @@ async function main() {
 	}
 
 	// ── Founder AI Automations Summary ──
-	console.log("\n" + "═".repeat(78));
+	console.log(`\n${"═".repeat(78)}`);
 	console.log("  FOUNDER AI — ALL POSSIBLE AUTOMATIONS");
 	console.log("═".repeat(78));
 
@@ -1389,12 +1389,12 @@ async function main() {
 			return r?.canRead;
 		});
 		console.log(
-			`  ${ai.name.padEnd(28)} ${allAvailable ? "✅ Possible" : "❌ Blocked (missing: " + ai.requires.filter((m) => !results.find((x) => x.model === m)?.canRead).join(", ") + ")"}`,
+			`  ${ai.name.padEnd(28)} ${allAvailable ? "✅ Possible" : `❌ Blocked (missing: ${ai.requires.filter((m) => !results.find((x) => x.model === m)?.canRead).join(", ")})`}`,
 		);
 	}
 
 	// ── Sync Frequency Recommendations ──
-	console.log("\n" + "═".repeat(78));
+	console.log(`\n${"═".repeat(78)}`);
 	console.log("  RECOMMENDED SYNC FREQUENCIES");
 	console.log("═".repeat(78));
 
@@ -1480,7 +1480,7 @@ async function main() {
 	fs.writeFileSync(modulesListPath, JSON.stringify(installedModules, null, 2));
 	console.log(`📄 Installed modules list saved to: ${modulesListPath}`);
 
-	console.log("\n" + "═".repeat(78));
+	console.log(`\n${"═".repeat(78)}`);
 	console.log("  AUDIT COMPLETE");
 	console.log("═".repeat(78));
 }

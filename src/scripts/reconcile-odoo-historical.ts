@@ -1,5 +1,5 @@
+import * as path from "node:path";
 import * as dotenv from "dotenv";
-import * as path from "path";
 import { OdooClient } from "../lib/odoo/client";
 import {
 	acquireReconciliationLock,
@@ -49,7 +49,9 @@ async function main() {
 
 	const client = new OdooClient();
 	if (client.getMockModeStatus()) {
-		console.log("ℹ️ Operating in [Mock Validation Mode]. Set Odoo parameters in .env.local for live endpoint.");
+		console.log(
+			"ℹ️ Operating in [Mock Validation Mode]. Set Odoo parameters in .env.local for live endpoint.",
+		);
 	} else {
 		console.log("🔒 Connecting to Live Odoo 19 SaaS Instance...");
 	}
@@ -65,14 +67,18 @@ async function main() {
 		console.log("\n🧪 Running Pre-Flight Simulation / Audit Mode...");
 		const auditResults = await runSimulationAudit(client);
 		console.table(auditResults);
-		console.log("\n💡 To execute reconciliation, run with `--execute` or `--resume`.");
+		console.log(
+			"\n💡 To execute reconciliation, run with `--execute` or `--resume`.",
+		);
 		process.exit(0);
 	}
 
 	// Execution or Resume Mode
 	const lockAcquired = await acquireReconciliationLock();
 	if (!lockAcquired) {
-		console.error("❌ Execution aborted: Active Reconciliation Lock held by another worker.");
+		console.error(
+			"❌ Execution aborted: Active Reconciliation Lock held by another worker.",
+		);
 		process.exit(1);
 	}
 
@@ -103,7 +109,9 @@ async function main() {
 			console.log("✅ Enterprise Reconciliation Completed Successfully!");
 			console.log("==================================================");
 		} else {
-			console.warn("\n⚠️ Reconciliation finished with warnings on some acceptance gates.");
+			console.warn(
+				"\n⚠️ Reconciliation finished with warnings on some acceptance gates.",
+			);
 		}
 	} catch (err: any) {
 		console.error("\n❌ Reconciliation execution failed:", err.message || err);

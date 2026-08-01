@@ -1,5 +1,5 @@
+import * as path from "node:path";
 import * as dotenv from "dotenv";
-import * as path from "path";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
@@ -53,20 +53,20 @@ async function main() {
 			fl.id AS id,
 			999999 AS upload_id, -- Reserved Odoo identifier
 			fo.name AS bill_no,
-			(fo.date_order AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date AS sale_date,
+			(fo.date_order AT TIME ZONE 'Asia/Kolkata')::date AS sale_date,
 			CASE
 				WHEN ds.code = 'KLJ' THEN 'Klj store'
 				WHEN ds.code = 'SWN' THEN 'SmartworksNoida Noida'
 				ELSE 'Head office'
 			END AS billed_by,
 			fl.id AS product_key,
-			dp.default_code AS sku_code,
-			dp.name AS item_name,
+			COALESCE(dp.default_code, 'SKU-UNKNOWN') AS sku_code,
+			COALESCE(dp.name, 'Unknown Product') AS item_name,
 			'Odoo' AS brand,
 			COALESCE(dp.category, 'Uncategorized') AS category,
 			fl.qty::int AS quantity,
-			(dp.list_price * fl.qty)::numeric(12,2) AS mrp_amount,
-			((dp.list_price * fl.qty) - (fl.price_subtotal + COALESCE(fl.tax_amount, 0.00)))::numeric(12,2) AS discount_amount,
+			(COALESCE(dp.list_price, 0.00) * fl.qty)::numeric(12,2) AS mrp_amount,
+			((COALESCE(dp.list_price, 0.00) * fl.qty) - (fl.price_subtotal + COALESCE(fl.tax_amount, 0.00)))::numeric(12,2) AS discount_amount,
 			(fl.price_subtotal + COALESCE(fl.tax_amount, 0.00))::numeric(12,2) AS gross_amount,
 			COALESCE(fl.tax_amount, 0.00)::numeric(12,2) AS tax_amount,
 			fl.price_subtotal AS net_amount,
@@ -80,7 +80,7 @@ async function main() {
 			END AS store_display_name
 		FROM fact_sales_lines fl
 		JOIN fact_sales_orders fo ON fl.order_id = fo.id
-		JOIN dim_products dp ON fl.product_id = dp.id
+		LEFT JOIN dim_products dp ON fl.product_id = dp.id
 		LEFT JOIN dim_customers dc ON fo.partner_id = dc.id
 		LEFT JOIN dim_stores ds ON fo.store_id = ds.id;
 	`;

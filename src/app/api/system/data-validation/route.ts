@@ -41,8 +41,8 @@ export async function GET() {
 		const inventorySoh = Number(invAgg.total_inventory_soh || 0);
 
 		// Mathematical Equation Validations
-		const eq1Diff = Math.abs((mrp - discount) - collection);
-		const eq2Diff = Math.abs((collection - gst) - revenue);
+		const eq1Diff = Math.abs(mrp - discount - collection);
+		const eq2Diff = Math.abs(collection - gst - revenue);
 
 		const validations = [
 			{
@@ -126,7 +126,10 @@ export async function GET() {
 	} catch (error: any) {
 		console.error("Failed to run data validation:", error);
 		return NextResponse.json(
-			{ success: false, error: error.message || "Failed to run data validation" },
+			{
+				success: false,
+				error: error.message || "Failed to run data validation",
+			},
 			{ status: 500 },
 		);
 	}

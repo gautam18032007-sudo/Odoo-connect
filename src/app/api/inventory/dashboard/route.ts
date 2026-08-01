@@ -11,19 +11,14 @@ export async function GET() {
 	const startTime = Date.now();
 
 	try {
-		const [
-			overview,
-			storeBreakdown,
-			fastSlow,
-			reorderRecs,
-			stockAging,
-		] = await Promise.all([
-			getExecutiveInventoryMetrics(),
-			getStoreInventoryBreakdown(),
-			getFastSlowMovingProducts(),
-			getReorderRecommendations(),
-			getStockAgingDistribution(),
-		]);
+		const [overview, storeBreakdown, fastSlow, reorderRecs, stockAging] =
+			await Promise.all([
+				getExecutiveInventoryMetrics(),
+				getStoreInventoryBreakdown(),
+				getFastSlowMovingProducts(),
+				getReorderRecommendations(),
+				getStockAgingDistribution(),
+			]);
 
 		const queryLatencyMs = Date.now() - startTime;
 

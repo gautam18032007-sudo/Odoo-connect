@@ -1,7 +1,7 @@
-import { logSyncTelemetry } from "../../repositories/odoo.repository";
-import { refreshMaterializedViews } from "../../materialized-views";
 import { sql } from "../../db";
-import { OdooClient } from "../client";
+import { refreshMaterializedViews } from "../../materialized-views";
+import { logSyncTelemetry } from "../../repositories/odoo.repository";
+import type { OdooClient } from "../client";
 import { syncCustomers } from "./syncCustomers";
 import { syncInventory } from "./syncInventory";
 import { syncProducts } from "./syncProducts";
@@ -30,8 +30,6 @@ export class SyncQueueManager {
 	private queue: QueueJob[] = [];
 	private deadLetterQueue: Array<QueueJob & { error: string }> = [];
 	private isProcessing = false;
-
-	constructor() {}
 
 	/** Enqueue jobs grouped by priority */
 	public enqueueBatch(lastSyncMap: Record<string, string | null>): void {
@@ -72,7 +70,10 @@ export class SyncQueueManager {
 		return [...this.deadLetterQueue];
 	}
 
-	private async executeSingleJob(client: OdooClient, job: QueueJob): Promise<number> {
+	private async executeSingleJob(
+		client: OdooClient,
+		job: QueueJob,
+	): Promise<number> {
 		const startedAt = new Date().toISOString();
 		job.attempts += 1;
 

@@ -1,5 +1,5 @@
-import { spawnSync } from "child_process";
-import path from "path";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
 
 /**
  * ZZ Dashboard release gate. Runs every verification suite and prints a single

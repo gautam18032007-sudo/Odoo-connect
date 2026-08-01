@@ -1,7 +1,10 @@
 import { generateRecommendations } from "@/lib/ai/recommendation-engine";
 import { generateSalesForecast } from "@/lib/intelligence/forecast/sales";
 import { calculateAOV } from "@/lib/metrics/engine";
-import { getCommercialBrandBreakdown, getStoreScorecards } from "../repositories/commercial.repository";
+import {
+	getCommercialBrandBreakdown,
+	getStoreScorecards,
+} from "../repositories/commercial.repository";
 
 export async function getCommercialIntelligence() {
 	const [stores, brands] = await Promise.all([

@@ -1,7 +1,6 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
-// Load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
 if (fs.existsSync(envPath)) {
 	const envConfig = fs.readFileSync(envPath, "utf8");
@@ -20,17 +19,42 @@ if (fs.existsSync(envPath)) {
 async function main() {
 	const { sql } = await import("../lib/db");
 
-	console.log("=== TIMEZONE EXPRESSION TEST IN POSTGRESQL ===");
+	console.log("=== TESTING TIMEZONE EXPRESSION ON TIMESTAMPTZ COLUMN ===");
 
-	const testRes = await sql`
+	const res = await sql`
 		SELECT 
-			'2026-07-31 01:53:40+00'::timestamptz as orig_utc,
-			('2026-07-31 01:53:40+00'::timestamptz AT TIME ZONE 'Asia/Kolkata')::text as ist_ts,
-			('2026-07-31 01:53:40+00'::timestamptz AT TIME ZONE 'Asia/Kolkata')::date as correct_ist_date,
-			('2026-07-31 01:53:40+00'::timestamptz AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date as double_tz_date
+			id,
+			name,
+			date_order::text as raw_timestamptz,
+			(date_order AT TIME ZONE 'Asia/Kolkata')::date as correct_ist_date,
+			(date_order AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date as double_shifted_date
+		FROM fact_sales_orders
+		WHERE date_order >= '2026-07-30 18:30:00' AND date_order <= '2026-07-31 18:29:59'
+		LIMIT 10
 	`;
+	console.table(res);
 
-	console.table(testRes);
+	const countCorrect = await sql`
+		SELECT COUNT(*)::int as count, COUNT(DISTINCT name)::int as distinct_bills, SUM(amount_total)::numeric(12,2) as gross
+		FROM fact_sales_orders
+		WHERE (date_order AT TIME ZONE 'Asia/Kolkata')::date = '2026-07-31'::date
+		  AND state IN ('paid', 'done', 'invoiced')
+	`;
+	console.log(
+		"\nCounts using (date_order AT TIME ZONE 'Asia/Kolkata')::date = '2026-07-31':",
+	);
+	console.table(countCorrect);
+
+	const countDoubleShift = await sql`
+		SELECT COUNT(*)::int as count, COUNT(DISTINCT name)::int as distinct_bills, SUM(amount_total)::numeric(12,2) as gross
+		FROM fact_sales_orders
+		WHERE (date_order AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = '2026-07-31'::date
+		  AND state IN ('paid', 'done', 'invoiced')
+	`;
+	console.log(
+		"\nCounts using (date_order AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = '2026-07-31':",
+	);
+	console.table(countDoubleShift);
 }
 
 main().catch(console.error);

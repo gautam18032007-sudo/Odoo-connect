@@ -113,7 +113,7 @@ export default function CohortsPage() {
 	const formattedDate = format(new Date(), "EEEE, do MMMM yyyy");
 
 	// Helper to render cohort cell styled appropriately
-	const renderCell = (cohortCustomers: number, m: any) => {
+	const renderCell = (_cohortCustomers: number, m: any) => {
 		if (!m || m.activeCustomers === 0) {
 			return (
 				<TableCell
@@ -126,7 +126,7 @@ export default function CohortsPage() {
 		}
 
 		let valueText = "";
-		let bgClass = "";
+		let _bgClass = "";
 		let textStyle = {};
 
 		if (selectedMetric === "retention") {
@@ -134,7 +134,7 @@ export default function CohortsPage() {
 			valueText = `${pct}%`;
 			// Retention always maps from 0 to 100
 			const opacity = Math.min(1, Math.max(0.02, pct / 100));
-			bgClass = "bg-blue-500/20 text-blue-600 dark:text-blue-400";
+			_bgClass = "bg-blue-500/20 text-blue-600 dark:text-blue-400";
 			textStyle = {
 				backgroundColor: `rgba(59, 130, 246, ${opacity * 0.45})`,
 				color: opacity > 0.6 ? "var(--foreground)" : "var(--muted-foreground)",
@@ -146,7 +146,7 @@ export default function CohortsPage() {
 				1,
 				Math.max(0.02, m.revenue / limits.maxRevenue),
 			);
-			bgClass = "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400";
+			_bgClass = "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400";
 			textStyle = {
 				backgroundColor: `rgba(16, 185, 129, ${opacity * 0.45})`,
 				color: opacity > 0.6 ? "var(--foreground)" : "var(--muted-foreground)",
@@ -155,7 +155,7 @@ export default function CohortsPage() {
 		} else if (selectedMetric === "aov") {
 			valueText = formatCurrency(m.aov, { noDecimals: true });
 			const opacity = Math.min(1, Math.max(0.02, m.aov / limits.maxAov));
-			bgClass = "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400";
+			_bgClass = "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400";
 			textStyle = {
 				backgroundColor: `rgba(99, 102, 241, ${opacity * 0.45})`,
 				color: opacity > 0.6 ? "var(--foreground)" : "var(--muted-foreground)",
@@ -167,7 +167,7 @@ export default function CohortsPage() {
 				1,
 				Math.max(0.02, m.billCuts / limits.maxBillCuts),
 			);
-			bgClass = "bg-amber-500/20 text-amber-600 dark:text-amber-400";
+			_bgClass = "bg-amber-500/20 text-amber-600 dark:text-amber-400";
 			textStyle = {
 				backgroundColor: `rgba(245, 158, 11, ${opacity * 0.45})`,
 				color: opacity > 0.6 ? "var(--foreground)" : "var(--muted-foreground)",

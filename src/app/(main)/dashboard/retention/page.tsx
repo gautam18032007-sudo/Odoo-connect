@@ -8,10 +8,8 @@ import { GlobalFilterBar } from "@/components/founder/global-filter-bar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CacTab } from "./_components/cac-tab";
 import { CohortsTab } from "./_components/cohorts-tab";
 import { LtvCacAovTab } from "./_components/ltv-cac-aov-tab";
-import { LtvTab } from "./_components/ltv-tab";
 import { OverviewTab } from "./_components/overview-tab";
 import { SegmentsHealthTab } from "./_components/segments-health-tab";
 

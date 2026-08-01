@@ -170,7 +170,9 @@ export async function upsertSalesOrders(
 	}
 }
 
-export async function upsertSalesLines(lines: OdooSalesLine[]): Promise<number[]> {
+export async function upsertSalesLines(
+	lines: OdooSalesLine[],
+): Promise<number[]> {
 	if (lines.length === 0) return [];
 
 	// Batch the FK-existence check into one query instead of one per line —
@@ -351,7 +353,10 @@ export async function getLatestTelemetryStatus(): Promise<{
 
 		if (row.status === "syncing") hasSyncing = true;
 		if (row.status === "success") hasSuccess = true;
-		if (seconds !== null && (maxSecondsAgo === null || seconds < maxSecondsAgo)) {
+		if (
+			seconds !== null &&
+			(maxSecondsAgo === null || seconds < maxSecondsAgo)
+		) {
 			maxSecondsAgo = seconds;
 		}
 	}

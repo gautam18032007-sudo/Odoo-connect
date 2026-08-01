@@ -1,7 +1,6 @@
 import { ArrowDownRight, ArrowUpRight, type LucideIcon } from "lucide-react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
-import { tokens } from "@/styles/tokens";
 
 interface MetricCardProps extends React.ComponentProps<"div"> {
 	title: string;

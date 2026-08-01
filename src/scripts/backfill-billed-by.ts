@@ -1,6 +1,6 @@
+import * as path from "node:path";
 import { neon } from "@neondatabase/serverless";
 import * as dotenv from "dotenv";
-import * as path from "path";
 
 dotenv.config({ path: path.join(process.cwd(), ".env.local") });
 

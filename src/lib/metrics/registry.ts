@@ -28,7 +28,8 @@ class MetricsRegistry {
 			name: "Average Order Value",
 			version: "v1.0",
 			category: "Sales",
-			description: "Average net currency value per completed sales transaction.",
+			description:
+				"Average net currency value per completed sales transaction.",
 			requiredFields: ["net_amount", "bill_no"],
 			owner: "Founder Analytics",
 			minVersionSupported: "v1.0",
@@ -40,7 +41,8 @@ class MetricsRegistry {
 			name: "Customer Lifetime Value",
 			version: "v1.0",
 			category: "Retention",
-			description: "Estimated cumulative customer spend over a 12-month lifecycle.",
+			description:
+				"Estimated cumulative customer spend over a 12-month lifecycle.",
 			requiredFields: ["net_amount", "customer_mobile", "sale_date"],
 			owner: "Retention Growth Team",
 			minVersionSupported: "v1.0",
@@ -52,11 +54,13 @@ class MetricsRegistry {
 			name: "Customer Acquisition Cost",
 			version: "v1.0",
 			category: "Retention",
-			description: "Blended marketing expenditure required to acquire one net new customer.",
+			description:
+				"Blended marketing expenditure required to acquire one net new customer.",
 			requiredFields: ["marketing_spend", "customer_mobile"],
 			owner: "Growth Marketing",
 			minVersionSupported: "v1.0",
-			validationRule: (input) => input?.marketingSpend >= 0 && input?.newCustomers > 0,
+			validationRule: (input) =>
+				input?.marketingSpend >= 0 && input?.newCustomers > 0,
 		});
 
 		this.register({
@@ -64,11 +68,13 @@ class MetricsRegistry {
 			name: "RFM Composite Score",
 			version: "v1.0",
 			category: "Retention",
-			description: "Composite scoring (1-5) evaluating recency, frequency, and monetary spend.",
+			description:
+				"Composite scoring (1-5) evaluating recency, frequency, and monetary spend.",
 			requiredFields: ["sale_date", "customer_mobile", "net_amount"],
 			owner: "Customer Intelligence",
 			minVersionSupported: "v1.0",
-			validationRule: (input) => input?.lastOrderDaysAgo >= 0 && input?.orderCount >= 1,
+			validationRule: (input) =>
+				input?.lastOrderDaysAgo >= 0 && input?.orderCount >= 1,
 		});
 
 		this.register({
@@ -76,11 +82,13 @@ class MetricsRegistry {
 			name: "Sales Pipeline Velocity",
 			version: "v1.0",
 			category: "CRM",
-			description: "Speed at which qualified opportunity value turns into closed revenue.",
+			description:
+				"Speed at which qualified opportunity value turns into closed revenue.",
 			requiredFields: ["expected_revenue", "stage", "date_deadline"],
 			owner: "Sales Ops",
 			minVersionSupported: "v1.0",
-			validationRule: (input) => input?.salesCycleDays > 0 && input?.opportunityValue >= 0,
+			validationRule: (input) =>
+				input?.salesCycleDays > 0 && input?.opportunityValue >= 0,
 		});
 	}
 

@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -22,7 +22,9 @@ async function main() {
 	const { syncSales } = await import("../lib/odoo/sync/syncSales");
 
 	console.log("\n=======================================================");
-	console.log("=== RUNNING SALES REPAIR SYNC (FULL OVERWRITE WITH AUTO-PRODUCT RECOVERY) ===");
+	console.log(
+		"=== RUNNING SALES REPAIR SYNC (FULL OVERWRITE WITH AUTO-PRODUCT RECOVERY) ===",
+	);
 	console.log("=======================================================\n");
 
 	const client = new OdooClient();
@@ -30,7 +32,9 @@ async function main() {
 	await client.authenticate();
 
 	const count = await syncSales(client, null);
-	console.log(`\nSales repair sync completed. Total orders processed: ${count}`);
+	console.log(
+		`\nSales repair sync completed. Total orders processed: ${count}`,
+	);
 
 	console.log("\n=======================================================\n");
 }

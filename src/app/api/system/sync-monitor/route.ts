@@ -69,7 +69,10 @@ export async function GET() {
 	} catch (error: any) {
 		console.error("Failed to fetch sync monitor state:", error);
 		return NextResponse.json(
-			{ success: false, error: error.message || "Failed to load sync monitor data" },
+			{
+				success: false,
+				error: error.message || "Failed to load sync monitor data",
+			},
 			{ status: 500 },
 		);
 	}

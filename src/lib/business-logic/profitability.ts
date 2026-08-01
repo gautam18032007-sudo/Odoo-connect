@@ -8,7 +8,6 @@ import {
 	profitPerBill,
 	toNumber,
 } from "./margin";
-import { METRICS } from "./metrics";
 import { getPurchaseSummary, hasPurchaseData } from "./purchase";
 
 type FounderSql = NeonQueryFunction<false, false>;
@@ -126,7 +125,7 @@ export async function getStoreProfitability(
 	periods: ComparisonPeriods,
 	filters: DashboardFilters,
 ): Promise<StoreProfitabilityRow[]> {
-	const food = retailFilter(filters);
+	const _food = retailFilter(filters);
 	const hasPurchase = await hasPurchaseData(db);
 
 	const salesRows = await (db as any).query(

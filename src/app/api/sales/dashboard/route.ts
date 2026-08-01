@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
 			const [skuRow] = await sql`
         SELECT COALESCE(MAX(item_name), ${filters.sku}) AS item_name
         FROM sales_fact_v
-        WHERE sku_code ILIKE ${"%" + filters.sku + "%"} OR item_name ILIKE ${"%" + filters.sku + "%"}
+        WHERE sku_code ILIKE ${`%${filters.sku}%`} OR item_name ILIKE ${`%${filters.sku}%`}
         LIMIT 1
       `;
 			if (skuRow) {

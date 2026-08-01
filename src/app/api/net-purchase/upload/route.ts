@@ -5,7 +5,8 @@ export async function POST() {
 		{
 			success: false,
 			deprecated: true,
-			error: "Net Purchase Excel upload has been deprecated. Live purchase transactions are synchronized automatically from Odoo SaaS.",
+			error:
+				"Net Purchase Excel upload has been deprecated. Live purchase transactions are synchronized automatically from Odoo SaaS.",
 		},
 		{ status: 410 },
 	);

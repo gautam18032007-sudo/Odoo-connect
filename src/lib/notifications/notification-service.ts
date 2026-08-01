@@ -15,7 +15,9 @@ export interface NotificationPayload {
 }
 
 class NotificationService {
-	public async sendNotification(notification: Omit<NotificationPayload, "id" | "timestamp">): Promise<void> {
+	public async sendNotification(
+		notification: Omit<NotificationPayload, "id" | "timestamp">,
+	): Promise<void> {
 		const fullPayload: NotificationPayload = {
 			...notification,
 			id: `notif_${Math.random().toString(36).substring(2, 9)}`,
@@ -29,7 +31,10 @@ class NotificationService {
 		}
 
 		// Webhook dispatch if configured
-		if (notification.channel === "webhook" && process.env.NOTIFICATION_WEBHOOK_URL) {
+		if (
+			notification.channel === "webhook" &&
+			process.env.NOTIFICATION_WEBHOOK_URL
+		) {
 			try {
 				await fetch(process.env.NOTIFICATION_WEBHOOK_URL, {
 					method: "POST",

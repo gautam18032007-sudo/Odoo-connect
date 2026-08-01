@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { getLatestTelemetryStatus, logSyncTelemetry } from "@/lib/repositories/odoo.repository";
 import { syncWorkerInstance } from "@/lib/odoo/sync/worker";
+import {
+	getLatestTelemetryStatus,
+	logSyncTelemetry,
+} from "@/lib/repositories/odoo.repository";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -26,19 +29,36 @@ export async function GET() {
 
 		// Record automatic heartbeats to ensure telemetry is never stale when worker/system is active
 		const nowIso = new Date().toISOString();
-		let lastSyncAt = telemetry.lastSyncAt || workerState.lastSyncTimestamp || nowIso;
+		let lastSyncAt =
+			telemetry.lastSyncAt || workerState.lastSyncTimestamp || nowIso;
 
 		// Calculate exact seconds elapsed in UTC
-		let secondsAgo = lastSyncAt ? Math.max(0, Math.floor((Date.now() - new Date(lastSyncAt).getTime()) / 1000)) : 2;
+		let secondsAgo = lastSyncAt
+			? Math.max(
+					0,
+					Math.floor((Date.now() - new Date(lastSyncAt).getTime()) / 1000),
+				)
+			: 2;
 
 		// If telemetry timestamp is historical (> 120s) but sync worker/system is actively running, auto-update pulse heartbeat
 		if (secondsAgo > 120 || !telemetry.lastSyncAt) {
-			await logSyncTelemetry("heartbeat", nowIso, nowIso, "success", 0, null, 0, 0, "active");
+			await logSyncTelemetry(
+				"heartbeat",
+				nowIso,
+				nowIso,
+				"success",
+				0,
+				null,
+				0,
+				0,
+				"active",
+			);
 			lastSyncAt = nowIso;
 			secondsAgo = 2;
 		}
 
-		let formattedStatus: "LIVE" | "FRESH" | "SYNCING" | "DELAYED" | "OFFLINE" = "LIVE";
+		let formattedStatus: "LIVE" | "FRESH" | "SYNCING" | "DELAYED" | "OFFLINE" =
+			"LIVE";
 
 		// Exact SLA Logic:
 		// 0-10s -> LIVE
@@ -68,7 +88,10 @@ export async function GET() {
 		});
 
 		// Enforce no-cache HTTP headers
-		response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+		response.headers.set(
+			"Cache-Control",
+			"no-store, no-cache, must-revalidate, proxy-revalidate",
+		);
 		response.headers.set("Pragma", "no-cache");
 		response.headers.set("Expires", "0");
 

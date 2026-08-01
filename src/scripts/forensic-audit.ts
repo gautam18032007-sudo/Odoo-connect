@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -21,11 +21,19 @@ async function main() {
 	const { sql } = await import("../lib/db");
 	const { OdooClient } = await import("../lib/odoo/client");
 	const { getDailyHealthMetrics } = await import("../lib/business-logic/sales");
-	const { cleanDashboardFilters, getComparisonPeriods } = await import("../lib/business-logic/comparison");
+	const { cleanDashboardFilters, getComparisonPeriods } = await import(
+		"../lib/business-logic/comparison"
+	);
 
-	console.log("\n=======================================================================");
-	console.log("=== FORENSIC 6-LAYER DIVERGENCE AUDIT (31 JUL & 01 AUG 2026 IST) ===");
-	console.log("=======================================================================\n");
+	console.log(
+		"\n=======================================================================",
+	);
+	console.log(
+		"=== FORENSIC 6-LAYER DIVERGENCE AUDIT (31 JUL & 01 AUG 2026 IST) ===",
+	);
+	console.log(
+		"=======================================================================\n",
+	);
 
 	const client = new OdooClient();
 	if (client.getMockModeStatus()) {
@@ -36,39 +44,84 @@ async function main() {
 	await client.authenticate();
 
 	const targets = [
-		{ label: "31 Jul 2026 IST", dateStr: "2026-07-31", istStartUtc: "2026-07-30 18:30:00", istEndUtc: "2026-07-31 18:29:59" },
-		{ label: "01 Aug 2026 IST", dateStr: "2026-08-01", istStartUtc: "2026-07-31 18:30:00", istEndUtc: "2026-08-01 18:29:59" },
+		{
+			label: "31 Jul 2026 IST",
+			dateStr: "2026-07-31",
+			istStartUtc: "2026-07-30 18:30:00",
+			istEndUtc: "2026-07-31 18:29:59",
+		},
+		{
+			label: "01 Aug 2026 IST",
+			dateStr: "2026-08-01",
+			istStartUtc: "2026-07-31 18:30:00",
+			istEndUtc: "2026-08-01 18:29:59",
+		},
 	];
 
 	for (const target of targets) {
-		console.log(`\n------------------------------------------------------------------`);
+		console.log(
+			`\n------------------------------------------------------------------`,
+		);
 		console.log(`AUDITING TARGET DATE: ${target.label}`);
-		console.log(`------------------------------------------------------------------`);
+		console.log(
+			`------------------------------------------------------------------`,
+		);
 
 		// LAYER 1: Odoo SaaS Ground Truth
-		const posOrdersOdoo = await client.callKw<any[]>("pos.order", "search_read", [], {
-			domain: [
-				["state", "in", ["paid", "done", "invoiced"]],
-				["date_order", ">=", target.istStartUtc],
-				["date_order", "<=", target.istEndUtc],
-			],
-			fields: ["id", "name", "date_order", "amount_total", "amount_tax", "lines"],
-		});
+		const posOrdersOdoo = await client.callKw<any[]>(
+			"pos.order",
+			"search_read",
+			[],
+			{
+				domain: [
+					["state", "in", ["paid", "done", "invoiced"]],
+					["date_order", ">=", target.istStartUtc],
+					["date_order", "<=", target.istEndUtc],
+				],
+				fields: [
+					"id",
+					"name",
+					"date_order",
+					"amount_total",
+					"amount_tax",
+					"lines",
+				],
+			},
+		);
 		const l1_bills = posOrdersOdoo.length;
-		const l1_gross = posOrdersOdoo.reduce((sum: number, o: any) => sum + Number(o.amount_total || 0), 0);
+		const l1_gross = posOrdersOdoo.reduce(
+			(sum: number, o: any) => sum + Number(o.amount_total || 0),
+			0,
+		);
 
 		const posLineIdsOdoo = posOrdersOdoo.flatMap((o: any) => o.lines || []);
 		let l1_units = 0;
 		let l1_net = 0;
 		let l1_tax = 0;
 		if (posLineIdsOdoo.length > 0) {
-			const linesOdoo = await client.callKw<any[]>("pos.order.line", "search_read", [], {
-				domain: [["id", "in", posLineIdsOdoo]],
-				fields: ["qty", "price_subtotal", "price_subtotal_incl"],
-			});
-			l1_units = linesOdoo.reduce((sum: number, l: any) => sum + Number(l.qty || 0), 0);
-			l1_net = linesOdoo.reduce((sum: number, l: any) => sum + Number(l.price_subtotal || 0), 0);
-			l1_tax = linesOdoo.reduce((sum: number, l: any) => sum + (Number(l.price_subtotal_incl || 0) - Number(l.price_subtotal || 0)), 0);
+			const linesOdoo = await client.callKw<any[]>(
+				"pos.order.line",
+				"search_read",
+				[],
+				{
+					domain: [["id", "in", posLineIdsOdoo]],
+					fields: ["qty", "price_subtotal", "price_subtotal_incl"],
+				},
+			);
+			l1_units = linesOdoo.reduce(
+				(sum: number, l: any) => sum + Number(l.qty || 0),
+				0,
+			);
+			l1_net = linesOdoo.reduce(
+				(sum: number, l: any) => sum + Number(l.price_subtotal || 0),
+				0,
+			);
+			l1_tax = linesOdoo.reduce(
+				(sum: number, l: any) =>
+					sum +
+					(Number(l.price_subtotal_incl || 0) - Number(l.price_subtotal || 0)),
+				0,
+			);
 		}
 
 		// LAYER 2: Neon Raw Tables (fact_sales_orders & fact_sales_lines)
@@ -78,8 +131,7 @@ async function main() {
 				SUM(amount_total)::numeric(12,2) as gross_amount,
 				SUM(amount_untaxed)::numeric(12,2) as net_amount
 			FROM fact_sales_orders
-			WHERE date_order >= ${target.istStartUtc}::timestamp
-			  AND date_order <= ${target.istEndUtc}::timestamp
+			WHERE (date_order AT TIME ZONE 'Asia/Kolkata')::date = ${target.dateStr}::date
 			  AND state IN ('paid', 'done', 'invoiced')
 		`;
 
@@ -91,8 +143,7 @@ async function main() {
 				SUM(tax_amount)::numeric(12,2) as tax_amount
 			FROM fact_sales_lines fl
 			JOIN fact_sales_orders fo ON fl.order_id = fo.id
-			WHERE fo.date_order >= ${target.istStartUtc}::timestamp
-			  AND fo.date_order <= ${target.istEndUtc}::timestamp
+			WHERE (fo.date_order AT TIME ZONE 'Asia/Kolkata')::date = ${target.dateStr}::date
 			  AND fo.state IN ('paid', 'done', 'invoiced')
 		`;
 
@@ -129,7 +180,11 @@ async function main() {
 			categoryScope: "all",
 		});
 		const periods = getComparisonPeriods(filters);
-		const dailyHealth = await getDailyHealthMetrics(sql as any, periods, filters);
+		const dailyHealth = await getDailyHealthMetrics(
+			sql as any,
+			periods,
+			filters,
+		);
 
 		const l4_bills = dailyHealth.salesKpis.billCuts.current;
 		const l4_gross = dailyHealth.salesKpis.collection.current;
@@ -146,7 +201,7 @@ async function main() {
 				"Gross Collection": `₹${l1_gross.toFixed(2)}`,
 				"Net Revenue": `₹${l1_net.toFixed(2)}`,
 				"GST Tax": `₹${l1_tax.toFixed(2)}`,
-				"Units": l1_units,
+				Units: l1_units,
 				Status: "SOURCE",
 			},
 			{
@@ -155,8 +210,9 @@ async function main() {
 				"Gross Collection": `₹${l2_gross.toFixed(2)}`,
 				"Net Revenue": `₹${l2_net.toFixed(2)}`,
 				"GST Tax": `₹${l2_tax.toFixed(2)}`,
-				"Units": l2_units,
-				Status: l2_gross === l1_gross && l2_bills === l1_bills ? "PASS" : "FAIL",
+				Units: l2_units,
+				Status:
+					l2_gross === l1_gross && l2_bills === l1_bills ? "PASS" : "FAIL",
 			},
 			{
 				Layer: "3. sales_fact_v View",
@@ -164,8 +220,9 @@ async function main() {
 				"Gross Collection": `₹${l3_gross.toFixed(2)}`,
 				"Net Revenue": `₹${l3_net.toFixed(2)}`,
 				"GST Tax": `₹${l3_tax.toFixed(2)}`,
-				"Units": l3_units,
-				Status: l3_gross === l1_gross && l3_bills === l1_bills ? "PASS" : "FAIL",
+				Units: l3_units,
+				Status:
+					l3_gross === l1_gross && l3_bills === l1_bills ? "PASS" : "FAIL",
 			},
 			{
 				Layer: "4. Dashboard API Engine",
@@ -173,28 +230,43 @@ async function main() {
 				"Gross Collection": `₹${l4_gross.toFixed(2)}`,
 				"Net Revenue": `₹${l4_net.toFixed(2)}`,
 				"GST Tax": `₹${l4_tax.toFixed(2)}`,
-				"Units": l4_units,
-				Status: l4_gross === l1_gross && l4_bills === l1_bills ? "PASS" : "FAIL",
+				Units: l4_units,
+				Status:
+					l4_gross === l1_gross && l4_bills === l1_bills ? "PASS" : "FAIL",
 			},
 		]);
 
 		console.log(`\nDIVERGENCE SUMMARY FOR ${target.label}:`);
-		console.log(`- Layer 1 vs Layer 2 (Odoo vs Raw DB): Gross Diff = ₹${(l1_gross - l2_gross).toFixed(2)}, Bill Diff = ${l1_bills - l2_bills}`);
-		console.log(`- Layer 2 vs Layer 3 (Raw DB vs View): Gross Diff = ₹${(l2_gross - l3_gross).toFixed(2)}, Bill Diff = ${l2_bills - l3_bills}`);
-		console.log(`- Layer 3 vs Layer 4 (View vs API):    Gross Diff = ₹${(l3_gross - l4_gross).toFixed(2)}, Bill Diff = ${l3_bills - l4_bills}`);
+		console.log(
+			`- Layer 1 vs Layer 2 (Odoo vs Raw DB): Gross Diff = ₹${(l1_gross - l2_gross).toFixed(2)}, Bill Diff = ${l1_bills - l2_bills}`,
+		);
+		console.log(
+			`- Layer 2 vs Layer 3 (Raw DB vs View): Gross Diff = ₹${(l2_gross - l3_gross).toFixed(2)}, Bill Diff = ${l2_bills - l3_bills}`,
+		);
+		console.log(
+			`- Layer 3 vs Layer 4 (View vs API):    Gross Diff = ₹${(l3_gross - l4_gross).toFixed(2)}, Bill Diff = ${l3_bills - l4_bills}`,
+		);
 
 		if (l1_gross !== l2_gross || l1_bills !== l2_bills) {
-			console.log(`\n❌ FIRST DIVERGENCE FOUND AT LAYER 2 (Odoo SaaS → Neon Raw Tables Sync Gap!)`);
+			console.log(
+				`\n❌ FIRST DIVERGENCE FOUND AT LAYER 2 (Odoo SaaS → Neon Raw Tables Sync Gap!)`,
+			);
 		} else if (l2_gross !== l3_gross || l2_bills !== l3_bills) {
-			console.log(`\n❌ FIRST DIVERGENCE FOUND AT LAYER 3 (Neon Raw Tables → sales_fact_v View Join/Filter Loss!)`);
+			console.log(
+				`\n❌ FIRST DIVERGENCE FOUND AT LAYER 3 (Neon Raw Tables → sales_fact_v View Join/Filter Loss!)`,
+			);
 		} else if (l3_gross !== l4_gross || l3_bills !== l4_bills) {
-			console.log(`\n❌ FIRST DIVERGENCE FOUND AT LAYER 4 (sales_fact_v View → Dashboard API Business Function Filter Loss!)`);
+			console.log(
+				`\n❌ FIRST DIVERGENCE FOUND AT LAYER 4 (sales_fact_v View → Dashboard API Business Function Filter Loss!)`,
+			);
 		} else {
 			console.log(`\n✅ ALL LAYERS MATCH EXACTLY FOR ${target.label}!`);
 		}
 	}
 
-	console.log("\n=======================================================================\n");
+	console.log(
+		"\n=======================================================================\n",
+	);
 }
 
 main().catch(console.error);

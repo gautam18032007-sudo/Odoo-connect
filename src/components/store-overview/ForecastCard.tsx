@@ -1,5 +1,4 @@
 import { AlertCircle, Calendar, TrendingDown, TrendingUp } from "lucide-react";
-import * as React from "react";
 import { Badge } from "@/components/ui/badge";
 import {
 	Card,

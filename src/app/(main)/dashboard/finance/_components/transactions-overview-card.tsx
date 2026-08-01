@@ -4,13 +4,7 @@ import { format } from "date-fns";
 import { useMemo } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 
-import {
-	Card,
-	CardAction,
-	CardContent,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	type ChartConfig,
 	ChartContainer,
@@ -45,7 +39,7 @@ export function TransactionsOverviewCard({ data }: { data: any }) {
 	function formatWeekday(value: string) {
 		try {
 			const date = new Date(value);
-			if (isNaN(date.getTime())) return value;
+			if (Number.isNaN(date.getTime())) return value;
 			return format(date, "d MMM");
 		} catch {
 			return value;
@@ -55,7 +49,7 @@ export function TransactionsOverviewCard({ data }: { data: any }) {
 	function formatTooltipLabel(value: string) {
 		try {
 			const date = new Date(value);
-			if (isNaN(date.getTime())) return value;
+			if (Number.isNaN(date.getTime())) return value;
 			return format(date, "PPPP");
 		} catch {
 			return value;

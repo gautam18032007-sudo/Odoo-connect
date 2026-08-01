@@ -15,7 +15,9 @@ export interface DataQualityReport {
 	status: "PASSED" | "NEEDS_REVIEW" | "REJECTED";
 }
 
-export function evaluateDataQuality(rows: Array<Record<string, any>>): DataQualityReport {
+export function evaluateDataQuality(
+	rows: Array<Record<string, any>>,
+): DataQualityReport {
 	if (!rows || rows.length === 0) {
 		return {
 			totalRows: 0,
@@ -42,7 +44,7 @@ export function evaluateDataQuality(rows: Array<Record<string, any>>): DataQuali
 			missingValues++;
 		}
 
-		if (row.net_amount !== undefined && isNaN(Number(row.net_amount))) {
+		if (row.net_amount !== undefined && Number.isNaN(Number(row.net_amount))) {
 			invalidFormats++;
 		}
 
@@ -55,10 +57,17 @@ export function evaluateDataQuality(rows: Array<Record<string, any>>): DataQuali
 		}
 	}
 
-	const validRows = totalRows - (missingValues + invalidFormats + duplicateRows);
-	const completenessScorePercent = Number((((totalRows - missingValues) / totalRows) * 100).toFixed(1));
-	const accuracyScorePercent = Number((((totalRows - invalidFormats) / totalRows) * 100).toFixed(1));
-	const overallConfidenceScore = Number(((validRows / totalRows) * 100).toFixed(1));
+	const validRows =
+		totalRows - (missingValues + invalidFormats + duplicateRows);
+	const completenessScorePercent = Number(
+		(((totalRows - missingValues) / totalRows) * 100).toFixed(1),
+	);
+	const accuracyScorePercent = Number(
+		(((totalRows - invalidFormats) / totalRows) * 100).toFixed(1),
+	);
+	const overallConfidenceScore = Number(
+		((validRows / totalRows) * 100).toFixed(1),
+	);
 
 	let status: DataQualityReport["status"] = "PASSED";
 	if (overallConfidenceScore < 70) {

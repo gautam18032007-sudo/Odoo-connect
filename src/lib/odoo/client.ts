@@ -1,5 +1,5 @@
+import * as path from "node:path";
 import * as dotenv from "dotenv";
-import * as path from "path";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
@@ -95,7 +95,7 @@ export class OdooClient {
 		}
 
 		const result = data.result;
-		if (!result || !result.uid) {
+		if (!result?.uid) {
 			throw new Error(
 				"Odoo Authentication Failed: Invalid response payload (missing uid).",
 			);
@@ -225,7 +225,7 @@ export class OdooClient {
 	private mockCallKw<T>(
 		model: string,
 		method: string,
-		args: any[],
+		_args: any[],
 		kwargs: Record<string, any>,
 	): T {
 		console.log(`[OdooClient] Mock callKw: ${model}.${method}(...)`);
@@ -441,7 +441,7 @@ export function formatDateTimeForOdoo(dateInput: string | Date): string {
 	const d = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
 
 	// Check if date is valid
-	if (isNaN(d.getTime())) {
+	if (Number.isNaN(d.getTime())) {
 		console.warn(
 			`[OdooClient] Warning: Invalid date string received: ${dateInput}. Defaulting to current time.`,
 		);

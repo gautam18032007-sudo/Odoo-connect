@@ -3,13 +3,11 @@
 import {
 	AlertCircle,
 	CheckCircle2,
-	Database,
 	FileCheck,
 	RefreshCw,
-	ShieldCheck,
 	XCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,7 +48,7 @@ export default function GroundTruthValidationPage() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
-	const fetchValidation = async () => {
+	const fetchValidation = useCallback(async () => {
 		try {
 			const res = await fetch("/api/system/data-validation");
 			const json = await res.json();
@@ -60,16 +58,16 @@ export default function GroundTruthValidationPage() {
 			} else {
 				setError(json.error || "Failed to validate ground truth metrics");
 			}
-		} catch (err: any) {
-			setError(err.message || "Network error");
+		} catch (err: unknown) {
+			setError(err instanceof Error ? err.message : "Network error");
 		} finally {
 			setLoading(false);
 		}
-	};
+	}, []);
 
 	useEffect(() => {
 		fetchValidation();
-	}, []);
+	}, [fetchValidation]);
 
 	if (loading) {
 		return (
@@ -97,7 +95,9 @@ export default function GroundTruthValidationPage() {
 			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 				<div>
 					<div className="flex items-center gap-2">
-						<h1 className="text-3xl font-bold tracking-tight">Ground Truth Data Validator</h1>
+						<h1 className="text-3xl font-bold tracking-tight">
+							Ground Truth Data Validator
+						</h1>
 						<Badge
 							variant="outline"
 							className={
@@ -106,14 +106,22 @@ export default function GroundTruthValidationPage() {
 									: "bg-destructive/10 text-destructive border-destructive/20"
 							}
 						>
-							{data.overallPassed ? "100% RECONCILED MATCH" : "VARIANCE MISMATCH"}
+							{data.overallPassed
+								? "100% RECONCILED MATCH"
+								: "VARIANCE MISMATCH"}
 						</Badge>
 					</div>
 					<p className="text-muted-foreground mt-1">
-						Automated verification of canonical PostgreSQL metrics against Master Equations
+						Automated verification of canonical PostgreSQL metrics against
+						Master Equations
 					</p>
 				</div>
-				<Button variant="outline" size="sm" onClick={fetchValidation} className="gap-2">
+				<Button
+					variant="outline"
+					size="sm"
+					onClick={fetchValidation}
+					className="gap-2"
+				>
 					<RefreshCw className="size-4" />
 					Run Re-Validation
 				</Button>
@@ -126,28 +134,42 @@ export default function GroundTruthValidationPage() {
 						<CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{formatCurrency(data.summary.revenue)}</div>
-						<p className="text-xs text-muted-foreground mt-1">SUM(net_amount)</p>
+						<div className="text-2xl font-bold">
+							{formatCurrency(data.summary.revenue)}
+						</div>
+						<p className="text-xs text-muted-foreground mt-1">
+							SUM(net_amount)
+						</p>
 					</CardContent>
 				</Card>
 
 				<Card>
 					<CardHeader className="pb-2">
-						<CardTitle className="text-sm font-medium">Gross Collection</CardTitle>
+						<CardTitle className="text-sm font-medium">
+							Gross Collection
+						</CardTitle>
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{formatCurrency(data.summary.collection)}</div>
+						<div className="text-2xl font-bold">
+							{formatCurrency(data.summary.collection)}
+						</div>
 						<p className="text-xs text-muted-foreground mt-1">MRP - Discount</p>
 					</CardContent>
 				</Card>
 
 				<Card>
 					<CardHeader className="pb-2">
-						<CardTitle className="text-sm font-medium">Total Discount</CardTitle>
+						<CardTitle className="text-sm font-medium">
+							Total Discount
+						</CardTitle>
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{formatCurrency(data.summary.discount)}</div>
-						<p className="text-xs text-muted-foreground mt-1">Total Promotional Discount</p>
+						<div className="text-2xl font-bold">
+							{formatCurrency(data.summary.discount)}
+						</div>
+						<p className="text-xs text-muted-foreground mt-1">
+							Total Promotional Discount
+						</p>
 					</CardContent>
 				</Card>
 
@@ -156,8 +178,12 @@ export default function GroundTruthValidationPage() {
 						<CardTitle className="text-sm font-medium">GST Liability</CardTitle>
 					</CardHeader>
 					<CardContent>
-						<div className="text-2xl font-bold">{formatCurrency(data.summary.gst)}</div>
-						<p className="text-xs text-muted-foreground mt-1">Collection - Revenue</p>
+						<div className="text-2xl font-bold">
+							{formatCurrency(data.summary.gst)}
+						</div>
+						<p className="text-xs text-muted-foreground mt-1">
+							Collection - Revenue
+						</p>
 					</CardContent>
 				</Card>
 			</div>
@@ -170,7 +196,8 @@ export default function GroundTruthValidationPage() {
 						Reconciliation Validation Audit Matrix
 					</CardTitle>
 					<CardDescription>
-						Every KPI must match the exact mathematical equation with zero variance
+						Every KPI must match the exact mathematical equation with zero
+						variance
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
@@ -182,13 +209,20 @@ export default function GroundTruthValidationPage() {
 							<div className="col-span-2 text-center">STATUS</div>
 						</div>
 						{data.validations.map((v, i) => (
-							<div key={i} className="grid grid-cols-12 p-3 text-sm border-b last:border-0 items-center">
+							<div
+								// biome-ignore lint/suspicious/noArrayIndexKey: stable static validation list
+								key={i}
+								className="grid grid-cols-12 p-3 text-sm border-b last:border-0 items-center"
+							>
 								<div className="col-span-4">
 									<p className="font-semibold">{v.metric}</p>
-									<p className="text-xs text-muted-foreground font-mono">{v.equation}</p>
+									<p className="text-xs text-muted-foreground font-mono">
+										{v.equation}
+									</p>
 								</div>
 								<div className="col-span-3 text-right font-mono font-bold">
-									{typeof v.canonicalValue === "number" && v.canonicalValue > 1000
+									{typeof v.canonicalValue === "number" &&
+									v.canonicalValue > 1000
 										? formatCurrency(v.canonicalValue)
 										: v.canonicalValue.toLocaleString()}
 								</div>

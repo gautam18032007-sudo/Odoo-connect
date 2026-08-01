@@ -14,9 +14,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useFilterStore } from "@/stores/founder/filter-store";
-
 import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
+import { useFilterStore } from "@/stores/founder/filter-store";
 
 export default function Page() {
 	const router = useRouter();

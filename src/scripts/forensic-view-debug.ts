@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -36,7 +36,9 @@ async function main() {
 		  AND state IN ('paid', 'done', 'invoiced')
 		ORDER BY date_order
 	`;
-	console.log(`1. Raw Orders in fact_sales_orders for IST window (${istStartUtc} to ${istEndUtc}): Count = ${rawOrders.length}`);
+	console.log(
+		`1. Raw Orders in fact_sales_orders for IST window (${istStartUtc} to ${istEndUtc}): Count = ${rawOrders.length}`,
+	);
 
 	// 2. Orders present in sales_fact_v for sale_date = '2026-07-31'
 	const viewBills = await sql`
@@ -45,17 +47,23 @@ async function main() {
 		WHERE sale_date = '2026-07-31'::date
 	`;
 	const viewBillNames = new Set(viewBills.map((b) => b.bill_no));
-	console.log(`2. Distinct bill_no in sales_fact_v for sale_date = '2026-07-31': Count = ${viewBills.length}`);
+	console.log(
+		`2. Distinct bill_no in sales_fact_v for sale_date = '2026-07-31': Count = ${viewBills.length}`,
+	);
 
 	// 3. Find raw orders NOT in sales_fact_v
 	const missingFromView = rawOrders.filter((o) => !viewBillNames.has(o.name));
-	console.log(`3. Orders in fact_sales_orders BUT MISSING from sales_fact_v (Count = ${missingFromView.length}):`);
+	console.log(
+		`3. Orders in fact_sales_orders BUT MISSING from sales_fact_v (Count = ${missingFromView.length}):`,
+	);
 	console.table(missingFromView.slice(0, 15));
 
 	// 4. Test why sample missing order is excluded from sales_fact_v
 	if (missingFromView.length > 0) {
 		const sample = missingFromView[0];
-		console.log(`\n4. Investigating sample missing order: ID=${sample.id}, Name=${sample.name}`);
+		console.log(
+			`\n4. Investigating sample missing order: ID=${sample.id}, Name=${sample.name}`,
+		);
 
 		const linesInPg = await sql`
 			SELECT fl.id, fl.order_id, fl.product_id, dp.id as dim_product_id, dp.name as product_name
@@ -63,13 +71,17 @@ async function main() {
 			LEFT JOIN dim_products dp ON fl.product_id = dp.id
 			WHERE fl.order_id = ${sample.id}
 		`;
-		console.log(`Lines in fact_sales_lines for order ${sample.id}: Count = ${linesInPg.length}`);
+		console.log(
+			`Lines in fact_sales_lines for order ${sample.id}: Count = ${linesInPg.length}`,
+		);
 		console.table(linesInPg);
 
 		const viewMatch = await sql`
 			SELECT * FROM sales_fact_v WHERE bill_no = ${sample.name}
 		`;
-		console.log(`Rows in sales_fact_v for bill_no ${sample.name}: Count = ${viewMatch.length}`);
+		console.log(
+			`Rows in sales_fact_v for bill_no ${sample.name}: Count = ${viewMatch.length}`,
+		);
 		if (viewMatch.length > 0) {
 			console.log("View row sale_date:", viewMatch[0].sale_date);
 		}

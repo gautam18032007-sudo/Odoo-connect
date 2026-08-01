@@ -1,8 +1,8 @@
 "use client";
 
 import { format } from "date-fns";
-import { AlertCircle, Calendar, Clock, Database, RefreshCw, Zap } from "lucide-react";
-import { memo, useEffect, useState } from "react";
+import { AlertCircle, Clock, Database, RefreshCw, Zap } from "lucide-react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -38,9 +38,9 @@ interface SyncStatusData {
 export const DataFreshnessSystem = memo(function DataFreshnessSystem() {
 	const [data, setData] = useState<SyncStatusData | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
+	const [_error, setError] = useState<string | null>(null);
 
-	const fetchStatus = async () => {
+	const fetchStatus = useCallback(async () => {
 		try {
 			const res = await fetch("/api/sync/status", { cache: "no-store" });
 			const json = await res.json();
@@ -57,14 +57,14 @@ export const DataFreshnessSystem = memo(function DataFreshnessSystem() {
 		} finally {
 			setIsLoading(false);
 		}
-	};
+	}, []);
 
 	useEffect(() => {
 		fetchStatus();
 		// Poll status every 5 seconds for live status
 		const interval = setInterval(fetchStatus, 5000);
 		return () => clearInterval(interval);
-	}, []);
+	}, [fetchStatus]);
 
 	if (isLoading && !data) {
 		return <Skeleton className="h-9 w-28 rounded-full" />;
@@ -118,7 +118,9 @@ export const DataFreshnessSystem = memo(function DataFreshnessSystem() {
 						</>
 					)}
 					{status === "OFFLINE" && (
-						<span className="text-muted-foreground font-semibold">🔴 OFFLINE</span>
+						<span className="text-muted-foreground font-semibold">
+							🔴 OFFLINE
+						</span>
 					)}
 				</button>
 			</SheetTrigger>
@@ -130,7 +132,8 @@ export const DataFreshnessSystem = memo(function DataFreshnessSystem() {
 						Odoo 19 Live Synchronization Telemetry
 					</SheetTitle>
 					<SheetDescription>
-						Near real-time incremental synchronization powered by Neon PostgreSQL.
+						Near real-time incremental synchronization powered by Neon
+						PostgreSQL.
 					</SheetDescription>
 				</SheetHeader>
 
@@ -147,8 +150,8 @@ export const DataFreshnessSystem = memo(function DataFreshnessSystem() {
 										status === "LIVE" || status === "FRESH"
 											? "bg-emerald-500 text-white"
 											: status === "SYNCING"
-											? "bg-blue-500 text-white"
-											: "bg-amber-500 text-white"
+												? "bg-blue-500 text-white"
+												: "bg-amber-500 text-white"
 									}
 								>
 									{status}
@@ -182,7 +185,8 @@ export const DataFreshnessSystem = memo(function DataFreshnessSystem() {
 							<div className="text-sm">
 								<p className="font-semibold">Sync Delay Warning</p>
 								<p className="opacity-90">
-									Data update latency is currently {timeAgo}. The Always-On Sync Worker is automatically attempting background reconnection.
+									Data update latency is currently {timeAgo}. The Always-On Sync
+									Worker is automatically attempting background reconnection.
 								</p>
 							</div>
 						</div>

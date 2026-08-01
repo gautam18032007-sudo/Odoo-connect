@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -20,7 +20,9 @@ if (fs.existsSync(envPath)) {
 async function main() {
 	const { sql } = await import("../lib/db");
 
-	console.log("=== DATATYPE AND CAST TEST FOR FACT_SALES_ORDERS.DATE_ORDER ===");
+	console.log(
+		"=== DATATYPE AND CAST TEST FOR FACT_SALES_ORDERS.DATE_ORDER ===",
+	);
 
 	const schemaRes = await sql`
 		SELECT column_name, data_type 

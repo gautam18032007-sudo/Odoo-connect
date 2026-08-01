@@ -45,7 +45,10 @@ export function calculateAOV(revenue: number, orderCount: number): number {
 /**
  * Calculates Gross Margin in currency and percentage
  */
-export function calculateGrossMargin(revenue: number, purchaseSpend: number): {
+export function calculateGrossMargin(
+	revenue: number,
+	purchaseSpend: number,
+): {
 	marginAmount: number;
 	marginPercent: number;
 } {
@@ -60,7 +63,10 @@ export function calculateGrossMargin(revenue: number, purchaseSpend: number): {
 /**
  * Calculates Customer Repeat Purchase Rate %
  */
-export function calculateRepeatPurchaseRate(repeatCustomers: number, totalCustomers: number): number {
+export function calculateRepeatPurchaseRate(
+	repeatCustomers: number,
+	totalCustomers: number,
+): number {
 	if (!totalCustomers || totalCustomers <= 0) return 0;
 	return Number(((repeatCustomers / totalCustomers) * 100).toFixed(2));
 }
@@ -68,7 +74,11 @@ export function calculateRepeatPurchaseRate(repeatCustomers: number, totalCustom
 /**
  * Calculates Customer Lifetime Value (LTV)
  */
-export function calculateLTV(aov: number, purchaseFrequency: number, lifespanYears = 1): number {
+export function calculateLTV(
+	aov: number,
+	purchaseFrequency: number,
+	lifespanYears = 1,
+): number {
 	if (!aov || aov <= 0) return 0;
 	return Number((aov * purchaseFrequency * lifespanYears).toFixed(2));
 }
@@ -76,18 +86,29 @@ export function calculateLTV(aov: number, purchaseFrequency: number, lifespanYea
 /**
  * Calculates Customer Acquisition Cost (CAC) and Payback Period
  */
-export function calculateCAC(marketingSpend: number, newCustomers: number, aov = 0, marginPercent = 100): {
+export function calculateCAC(
+	marketingSpend: number,
+	newCustomers: number,
+	aov = 0,
+	marginPercent = 100,
+): {
 	cac: number;
 	paybackMonths: number;
 } {
-	if (!newCustomers || newCustomers <= 0 || !marketingSpend || marketingSpend <= 0) {
+	if (
+		!newCustomers ||
+		newCustomers <= 0 ||
+		!marketingSpend ||
+		marketingSpend <= 0
+	) {
 		return { cac: 0, paybackMonths: 0 };
 	}
 	const cac = Number((marketingSpend / newCustomers).toFixed(2));
 	const monthlyMarginPerCustomer = (aov * (marginPercent / 100)) / 12;
-	const paybackMonths = monthlyMarginPerCustomer > 0
-		? Number((cac / monthlyMarginPerCustomer).toFixed(1))
-		: 0;
+	const paybackMonths =
+		monthlyMarginPerCustomer > 0
+			? Number((cac / monthlyMarginPerCustomer).toFixed(1))
+			: 0;
 
 	return { cac, paybackMonths };
 }
@@ -150,7 +171,10 @@ export function calculatePipelineVelocity(
 /**
  * Calculates CRM Win Rate %
  */
-export function calculateWinRate(closedWon: number, totalClosed: number): number {
+export function calculateWinRate(
+	closedWon: number,
+	totalClosed: number,
+): number {
 	if (!totalClosed || totalClosed <= 0) return 0;
 	return Number(((closedWon / totalClosed) * 100).toFixed(2));
 }

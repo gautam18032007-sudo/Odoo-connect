@@ -16,7 +16,9 @@ export interface ForecastResult {
 	points: ForecastPoint[];
 }
 
-export function generateSalesForecast(historicalDailyData: Array<{ date: string; revenue: number }>): ForecastResult {
+export function generateSalesForecast(
+	historicalDailyData: Array<{ date: string; revenue: number }>,
+): ForecastResult {
 	if (!historicalDailyData || historicalDailyData.length === 0) {
 		return {
 			next30DaysRevenue: 0,
@@ -26,7 +28,10 @@ export function generateSalesForecast(historicalDailyData: Array<{ date: string;
 		};
 	}
 
-	const totalRevenue = historicalDailyData.reduce((sum, item) => sum + (item.revenue || 0), 0);
+	const totalRevenue = historicalDailyData.reduce(
+		(sum, item) => sum + (item.revenue || 0),
+		0,
+	);
 	const avgDailyRevenue = totalRevenue / historicalDailyData.length;
 	const growthTrendPercent = 8.5; // Estimated trend velocity
 
@@ -41,7 +46,7 @@ export function generateSalesForecast(historicalDailyData: Array<{ date: string;
 		targetDate.setDate(targetDate.getDate() + i);
 		const dateStr = targetDate.toISOString().split("T")[0];
 
-		const dayRevenue = Math.round(projectedDaily * (1 + (Math.sin(i) * 0.05)));
+		const dayRevenue = Math.round(projectedDaily * (1 + Math.sin(i) * 0.05));
 		points.push({
 			date: dateStr,
 			projectedRevenue: dayRevenue,

@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -32,7 +32,9 @@ async function main() {
 
 	console.log("1. Running syncSales from Odoo SaaS (full catch-up sweep)...");
 	const totalProcessed = await syncSales(client, null);
-	console.log(`- Total orders processed during catch-up sweep: ${totalProcessed}`);
+	console.log(
+		`- Total orders processed during catch-up sweep: ${totalProcessed}`,
+	);
 
 	console.log("\n=======================================================\n");
 }

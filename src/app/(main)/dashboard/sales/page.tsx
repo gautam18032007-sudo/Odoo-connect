@@ -9,7 +9,6 @@ import {
 	Store,
 	TrendingDown,
 	TrendingUp,
-	Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -51,7 +50,7 @@ import {
 } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { exportToExcel } from "@/lib/export-excel";
-import { formatSignedPercent, growthTextClass } from "@/lib/growth-ui";
+import { formatSignedPercent } from "@/lib/growth-ui";
 import { formatCurrency } from "@/lib/utils";
 import { useFilterStore } from "@/stores/founder/filter-store";
 
@@ -62,7 +61,7 @@ function safeFixed(value: number | null | undefined, digits = 1): string {
 }
 
 const CustomTooltip = ({ active, payload }: any) => {
-	if (active && payload && payload.length) {
+	if (active && payload?.length) {
 		const data = payload[0].payload;
 		return (
 			<div className="bg-popover border border-border p-2 rounded-md shadow-sm text-xs">
@@ -112,7 +111,7 @@ const EMPTY_STORE_KPI = {
 	aov: 0,
 };
 
-function getStoreKpi(
+function _getStoreKpi(
 	storePerformance: Array<{
 		billedBy: string;
 		revenue: number;
@@ -377,13 +376,11 @@ export default function SalesDashboardPage() {
 				<div className="max-w-md space-y-2">
 					<h2 className="text-2xl font-bold">Welcome to ZenZebra</h2>
 					<p className="text-muted-foreground">
-						No data synced yet. Ensure Odoo SaaS background sync worker is running.
+						No data synced yet. Ensure Odoo SaaS background sync worker is
+						running.
 					</p>
 				</div>
-				<Button
-					size="lg"
-					onClick={() => router.push("/dashboard/inventory")}
-				>
+				<Button size="lg" onClick={() => router.push("/dashboard/inventory")}>
 					<Store className="mr-2 size-5" />
 					Open Inventory Dashboard
 				</Button>
@@ -396,7 +393,9 @@ export default function SalesDashboardPage() {
 			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
 				<div>
 					<h2 className="text-3xl font-bold tracking-tight">Sales Dashboard</h2>
-					<p className="text-muted-foreground mt-1">System of Attention • Odoo SaaS Live Sync</p>
+					<p className="text-muted-foreground mt-1">
+						System of Attention • Odoo SaaS Live Sync
+					</p>
 				</div>
 				<div className="flex items-center gap-3">
 					<DataFreshnessSystem />
@@ -429,10 +428,7 @@ export default function SalesDashboardPage() {
 						<h2 className="text-xl font-bold">Couldn't load the dashboard</h2>
 						<p className="text-muted-foreground text-sm">{error}</p>
 					</div>
-					<Button
-						variant="outline"
-						onClick={() => refetch()}
-					>
+					<Button variant="outline" onClick={() => refetch()}>
 						Retry
 					</Button>
 				</div>

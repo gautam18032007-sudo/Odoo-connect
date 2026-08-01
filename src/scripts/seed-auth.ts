@@ -1,8 +1,8 @@
+import crypto from "node:crypto";
+import path from "node:path";
 import { neon } from "@neondatabase/serverless";
 import { hash } from "@node-rs/argon2";
-import crypto from "crypto";
 import * as dotenv from "dotenv";
-import path from "path";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });

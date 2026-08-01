@@ -307,7 +307,7 @@ export async function getStoreAovBillsHistory(
 			];
 			const monthName = months[parseInt(m, 10) - 1];
 			return `${monthName} ${y}`;
-		} catch (e) {
+		} catch (_e) {
 			return dateStr;
 		}
 	};

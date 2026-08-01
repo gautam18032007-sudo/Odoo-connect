@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -34,7 +34,9 @@ async function main() {
 		  AND fl.id IS NULL
 		ORDER BY fo.id
 	`;
-	console.log(`1. Sample orders in fact_sales_orders (31 Jul 2026) with NO lines in fact_sales_lines (Total: ${ordersWithoutLines.length}):`);
+	console.log(
+		`1. Sample orders in fact_sales_orders (31 Jul 2026) with NO lines in fact_sales_lines (Total: ${ordersWithoutLines.length}):`,
+	);
 	console.table(ordersWithoutLines.slice(0, 15));
 
 	// 2. Check if Odoo connection parameters exist
@@ -42,48 +44,88 @@ async function main() {
 	if (!client.getMockModeStatus()) {
 		console.log("\n2. Querying Odoo directly for 31 Jul 2026 (IST vs UTC)...");
 		await client.authenticate();
-		
+
 		// Odoo dates for 31 Jul 2026 IST: 2026-07-30 18:30:00 UTC to 2026-07-31 18:29:59 UTC
 		const istStartUtc = "2026-07-30 18:30:00";
 		const istEndUtc = "2026-07-31 18:29:59";
 
 		// POS Orders count & sum in Odoo for IST date range
-		const posOrdersIst = await client.callKw<any[]>("pos.order", "search_read", [], {
-			domain: [
-				["state", "in", ["paid", "done", "invoiced"]],
-				["date_order", ">=", istStartUtc],
-				["date_order", "<=", istEndUtc],
-			],
-			fields: ["id", "name", "date_order", "amount_total", "amount_tax", "lines"],
-		});
+		const posOrdersIst = await client.callKw<any[]>(
+			"pos.order",
+			"search_read",
+			[],
+			{
+				domain: [
+					["state", "in", ["paid", "done", "invoiced"]],
+					["date_order", ">=", istStartUtc],
+					["date_order", "<=", istEndUtc],
+				],
+				fields: [
+					"id",
+					"name",
+					"date_order",
+					"amount_total",
+					"amount_tax",
+					"lines",
+				],
+			},
+		);
 
-		console.log(`Odoo POS Orders for 31 Jul 2026 IST (${istStartUtc} to ${istEndUtc}):`);
+		console.log(
+			`Odoo POS Orders for 31 Jul 2026 IST (${istStartUtc} to ${istEndUtc}):`,
+		);
 		console.log(`- Count: ${posOrdersIst.length}`);
-		const posGross = posOrdersIst.reduce((sum: number, o: any) => sum + Number(o.amount_total || 0), 0);
+		const posGross = posOrdersIst.reduce(
+			(sum: number, o: any) => sum + Number(o.amount_total || 0),
+			0,
+		);
 		console.log(`- Total Gross (amount_total): ₹${posGross.toFixed(2)}`);
 
 		// Standard Sale Orders count & sum in Odoo for IST date range
-		const saleOrdersIst = await client.callKw<any[]>("sale.order", "search_read", [], {
-			domain: [
-				["state", "in", ["sale", "done"]],
-				["date_order", ">=", istStartUtc],
-				["date_order", "<=", istEndUtc],
-			],
-			fields: ["id", "name", "date_order", "amount_total", "amount_untaxed", "order_line"],
-		});
+		const saleOrdersIst = await client.callKw<any[]>(
+			"sale.order",
+			"search_read",
+			[],
+			{
+				domain: [
+					["state", "in", ["sale", "done"]],
+					["date_order", ">=", istStartUtc],
+					["date_order", "<=", istEndUtc],
+				],
+				fields: [
+					"id",
+					"name",
+					"date_order",
+					"amount_total",
+					"amount_untaxed",
+					"order_line",
+				],
+			},
+		);
 
-		console.log(`\nOdoo Standard Sale Orders for 31 Jul 2026 IST (${istStartUtc} to ${istEndUtc}):`);
+		console.log(
+			`\nOdoo Standard Sale Orders for 31 Jul 2026 IST (${istStartUtc} to ${istEndUtc}):`,
+		);
 		console.log(`- Count: ${saleOrdersIst.length}`);
-		const saleGross = saleOrdersIst.reduce((sum: number, o: any) => sum + Number(o.amount_total || 0), 0);
+		const saleGross = saleOrdersIst.reduce(
+			(sum: number, o: any) => sum + Number(o.amount_total || 0),
+			0,
+		);
 		console.log(`- Total Gross (amount_total): ₹${saleGross.toFixed(2)}`);
-		console.log(`- COMBINED Odoo Orders: ${posOrdersIst.length + saleOrdersIst.length}`);
+		console.log(
+			`- COMBINED Odoo Orders: ${posOrdersIst.length + saleOrdersIst.length}`,
+		);
 		console.log(`- COMBINED Odoo Gross: ₹${(posGross + saleGross).toFixed(2)}`);
 	} else {
-		console.log("\n2. Running in Validation Mode (Odoo credentials not provided). Analyzing local database tables...");
+		console.log(
+			"\n2. Running in Validation Mode (Odoo credentials not provided). Analyzing local database tables...",
+		);
 	}
 
 	// 3. Inspect sales_fact_v view JOIN structure
-	console.log("\n3. Checking sales_fact_v view join count vs fact_sales_orders count for 31 Jul 2026:");
+	console.log(
+		"\n3. Checking sales_fact_v view join count vs fact_sales_orders count for 31 Jul 2026:",
+	);
 	const istV = await sql`
 		SELECT 
 			COUNT(*)::int as view_lines,

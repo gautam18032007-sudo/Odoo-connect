@@ -24,7 +24,11 @@ export interface FinanceSummary {
 	openPurchaseOrdersCount: number;
 	openPurchaseOrdersValue: number;
 	recentPurchaseOrders: PurchaseOrder[];
-	vendorBreakdown: Array<{ vendor: string; totalSpend: number; poCount: number }>;
+	vendorBreakdown: Array<{
+		vendor: string;
+		totalSpend: number;
+		poCount: number;
+	}>;
 }
 
 export async function getFinanceSummary(): Promise<FinanceSummary> {
@@ -53,7 +57,8 @@ export async function getFinanceSummary(): Promise<FinanceSummary> {
 		const openPurchaseOrdersValue = Number(poStat.openValue || 0);
 
 		const grossMargin = totalRevenue - totalPurchaseSpend;
-		const grossMarginPercent = totalRevenue > 0 ? (grossMargin / totalRevenue) * 100 : 0;
+		const grossMarginPercent =
+			totalRevenue > 0 ? (grossMargin / totalRevenue) * 100 : 0;
 
 		// Fetch recent POs
 		const recentPOs = await sql`

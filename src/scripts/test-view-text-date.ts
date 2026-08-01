@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -20,7 +20,9 @@ if (fs.existsSync(envPath)) {
 async function main() {
 	const { sql } = await import("../lib/db");
 
-	console.log("=== TESTING VIEW SALE_DATE WITH AT TIME ZONE 'Asia/Kolkata' ===");
+	console.log(
+		"=== TESTING VIEW SALE_DATE WITH AT TIME ZONE 'Asia/Kolkata' ===",
+	);
 
 	// First let's update sales_fact_v view to use (fo.date_order AT TIME ZONE 'Asia/Kolkata')::date
 	await sql`
@@ -83,7 +85,9 @@ async function main() {
 		LEFT JOIN dim_stores ds ON fo.store_id = ds.id;
 	`;
 
-	console.log("View sales_fact_v updated with (fo.date_order AT TIME ZONE 'Asia/Kolkata')::date!");
+	console.log(
+		"View sales_fact_v updated with (fo.date_order AT TIME ZONE 'Asia/Kolkata')::date!",
+	);
 
 	// Query sales_fact_v for sale_date = '2026-07-31'
 	const viewRes = await sql`

@@ -33,14 +33,8 @@ const PERMISSION_MATRIX: Record<UserRole, Set<ResourceAction>> = {
 		"analytics:view_all",
 		"analytics:export",
 	]),
-	Sales: new Set([
-		"lead:create",
-		"lead:update_stage",
-		"analytics:export",
-	]),
-	Viewer: new Set([
-		"analytics:export",
-	]),
+	Sales: new Set(["lead:create", "lead:update_stage", "analytics:export"]),
+	Viewer: new Set(["analytics:export"]),
 };
 
 export function hasPermission(role: UserRole, action: ResourceAction): boolean {
@@ -48,8 +42,13 @@ export function hasPermission(role: UserRole, action: ResourceAction): boolean {
 	return permissions ? permissions.has(action) : false;
 }
 
-export function enforcePermission(role: UserRole, action: ResourceAction): void {
+export function enforcePermission(
+	role: UserRole,
+	action: ResourceAction,
+): void {
 	if (!hasPermission(role, action)) {
-		throw new Error(`Forbidden: Role '${role}' lacks permission for action '${action}'`);
+		throw new Error(
+			`Forbidden: Role '${role}' lacks permission for action '${action}'`,
+		);
 	}
 }

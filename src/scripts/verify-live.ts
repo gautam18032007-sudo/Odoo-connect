@@ -1,6 +1,6 @@
+import path from "node:path";
 import { neon } from "@neondatabase/serverless";
 import * as dotenv from "dotenv";
-import path from "path";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
@@ -30,8 +30,13 @@ async function main() {
 
 	// 1. Database Health Check
 	try {
-		const [dbRow] = await sql`SELECT current_database() AS db, version() AS ver`;
-		report("Database Health & Connectivity", Boolean(dbRow?.db), `Database: ${dbRow?.db}`);
+		const [dbRow] =
+			await sql`SELECT current_database() AS db, version() AS ver`;
+		report(
+			"Database Health & Connectivity",
+			Boolean(dbRow?.db),
+			`Database: ${dbRow?.db}`,
+		);
 	} catch (err: any) {
 		report("Database Health & Connectivity", false, err.message);
 	}
@@ -44,7 +49,11 @@ async function main() {
 			WHERE table_schema = 'public' 
 			  AND table_name IN ('dim_products', 'dim_customers', 'dim_stores', 'fact_sales_orders', 'fact_sales_lines', 'fact_inventory', 'sync_telemetry')
 		`;
-		report("Canonical PostgreSQL Tables", tables.length >= 7, `${tables.length}/7 canonical tables present`);
+		report(
+			"Canonical PostgreSQL Tables",
+			tables.length >= 7,
+			`${tables.length}/7 canonical tables present`,
+		);
 	} catch (err: any) {
 		report("Canonical PostgreSQL Tables", false, err.message);
 	}
@@ -56,7 +65,11 @@ async function main() {
 			FROM information_schema.views 
 			WHERE table_schema = 'public' AND table_name = 'sales_fact_v'
 		`;
-		report("sales_fact_v Compatibility View", views.length === 1, "sales_fact_v present");
+		report(
+			"sales_fact_v Compatibility View",
+			views.length === 1,
+			"sales_fact_v present",
+		);
 	} catch (err: any) {
 		report("sales_fact_v Compatibility View", false, err.message);
 	}
@@ -80,8 +93,8 @@ async function main() {
 		const gst = Number(odooSalesAgg.total_gst || 0);
 		const revenue = Number(odooSalesAgg.total_revenue || 0);
 
-		const eq1Diff = Math.abs((mrp - discount) - collection);
-		const eq2Diff = Math.abs((collection - gst) - revenue);
+		const eq1Diff = Math.abs(mrp - discount - collection);
+		const eq2Diff = Math.abs(collection - gst - revenue);
 
 		report(
 			"Financial Equation 1 (Odoo Sync: MRP - Discount = Collection)",

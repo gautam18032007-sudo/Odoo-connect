@@ -8,7 +8,6 @@ import {
 	ArrowUpRight,
 	Calendar,
 	IndianRupee,
-	Minus,
 	ShoppingCart,
 	Store,
 	Tag,
@@ -114,10 +113,25 @@ function GrowthBadge({ growth }: { growth: number | "NEW STORE" }) {
 
 function DiagnosisBadge({ type }: { type: string }) {
 	const map: Record<string, { label: string; color: string }> = {
-		HEALTHY: { label: "Healthy", color: "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/15" },
-		STABLE: { label: "Stable", color: "text-blue-600 dark:text-blue-400 bg-blue-500/10 dark:bg-blue-500/15" },
-		WARNING: { label: "Warning", color: "text-amber-600 dark:text-amber-400 bg-amber-500/10 dark:bg-amber-500/15" },
-		CRITICAL: { label: "Critical", color: "text-red-600 dark:text-red-400 bg-red-500/10 dark:bg-red-500/15" },
+		HEALTHY: {
+			label: "Healthy",
+			color:
+				"text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/15",
+		},
+		STABLE: {
+			label: "Stable",
+			color:
+				"text-blue-600 dark:text-blue-400 bg-blue-500/10 dark:bg-blue-500/15",
+		},
+		WARNING: {
+			label: "Warning",
+			color:
+				"text-amber-600 dark:text-amber-400 bg-amber-500/10 dark:bg-amber-500/15",
+		},
+		CRITICAL: {
+			label: "Critical",
+			color: "text-red-600 dark:text-red-400 bg-red-500/10 dark:bg-red-500/15",
+		},
 	};
 	const entry = map[type] ?? {
 		label: type,
@@ -364,13 +378,17 @@ export default function Page({
 							) : storeData ? (
 								<dl className="space-y-2.5 text-sm">
 									<div className="flex justify-between items-center">
-										<dt className="text-muted-foreground text-xs">Expected Closing</dt>
+										<dt className="text-muted-foreground text-xs">
+											Expected Closing
+										</dt>
 										<dd className="font-semibold font-mono">
 											{formatCurrency(storeData.forecast.expectedClosing)}
 										</dd>
 									</div>
 									<div className="flex justify-between items-center">
-										<dt className="text-muted-foreground text-xs">Run Rate / Day</dt>
+										<dt className="text-muted-foreground text-xs">
+											Run Rate / Day
+										</dt>
 										<dd className="font-semibold font-mono">
 											{formatCurrency(storeData.forecast.runRate)}
 										</dd>
@@ -387,15 +405,21 @@ export default function Page({
 										</dd>
 									</div>
 									<div className="flex justify-between items-center">
-										<dt className="text-muted-foreground text-xs">Working Days Left</dt>
+										<dt className="text-muted-foreground text-xs">
+											Working Days Left
+										</dt>
 										<dd className="font-semibold">
 											{storeData.forecast.remainingWorkingDays} days
 										</dd>
 									</div>
 									<div className="flex justify-between items-start gap-4">
-										<dt className="text-muted-foreground text-xs shrink-0 pt-0.5">Confidence</dt>
+										<dt className="text-muted-foreground text-xs shrink-0 pt-0.5">
+											Confidence
+										</dt>
 										<dd className="font-semibold text-right text-xs">
-											<span className="capitalize">{storeData.forecast.confidence}</span>
+											<span className="capitalize">
+												{storeData.forecast.confidence}
+											</span>
 											{storeData.forecast.reason && (
 												<span className="text-muted-foreground font-normal ml-1">
 													— {storeData.forecast.reason}
@@ -432,7 +456,9 @@ export default function Page({
 										<dt className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">
 											Current Period
 										</dt>
-										<dd className="font-semibold text-sm">{period.current.label}</dd>
+										<dd className="font-semibold text-sm">
+											{period.current.label}
+										</dd>
 										<dd className="text-xs text-muted-foreground font-mono">
 											{period.current.start} &rarr; {period.current.end}
 										</dd>
@@ -441,7 +467,9 @@ export default function Page({
 										<dt className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">
 											Compared Against
 										</dt>
-										<dd className="font-semibold text-sm">{period.previous.label}</dd>
+										<dd className="font-semibold text-sm">
+											{period.previous.label}
+										</dd>
 										<dd className="text-xs text-muted-foreground font-mono">
 											{period.previous.start} &rarr; {period.previous.end}
 										</dd>

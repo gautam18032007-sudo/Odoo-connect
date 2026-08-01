@@ -1,10 +1,9 @@
 "use client";
 
-import { ArrowRight, Building2, CheckCircle2, DollarSign, MoreHorizontal, Phone, ShieldAlert, Sparkles, User } from "lucide-react";
-import { useState } from "react";
+import { Building2, MoreHorizontal, Phone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -32,14 +31,42 @@ interface PipelineKanbanBoardProps {
 }
 
 const STAGES = [
-	{ id: "Qualified", title: "Qualified Leads", color: "border-l-blue-500", bg: "bg-blue-500/10 text-blue-700 dark:text-blue-300" },
-	{ id: "Discovery", title: "Discovery Phase", color: "border-l-amber-500", bg: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
-	{ id: "Proposal Sent", title: "Proposal Sent", color: "border-l-purple-500", bg: "bg-purple-500/10 text-purple-700 dark:text-purple-300" },
-	{ id: "Negotiation", title: "Negotiation", color: "border-l-indigo-500", bg: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
-	{ id: "Closed Won", title: "Closed Won", color: "border-l-emerald-500", bg: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+	{
+		id: "Qualified",
+		title: "Qualified Leads",
+		color: "border-l-blue-500",
+		bg: "bg-blue-500/10 text-blue-700 dark:text-blue-300",
+	},
+	{
+		id: "Discovery",
+		title: "Discovery Phase",
+		color: "border-l-amber-500",
+		bg: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+	},
+	{
+		id: "Proposal Sent",
+		title: "Proposal Sent",
+		color: "border-l-purple-500",
+		bg: "bg-purple-500/10 text-purple-700 dark:text-purple-300",
+	},
+	{
+		id: "Negotiation",
+		title: "Negotiation",
+		color: "border-l-indigo-500",
+		bg: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
+	},
+	{
+		id: "Closed Won",
+		title: "Closed Won",
+		color: "border-l-emerald-500",
+		bg: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+	},
 ];
 
-export function PipelineKanbanBoard({ leads, onStageChange }: PipelineKanbanBoardProps) {
+export function PipelineKanbanBoard({
+	leads,
+	onStageChange,
+}: PipelineKanbanBoardProps) {
 	const getLeadsByStage = (stageId: string) => {
 		return leads.filter((l) => l.stage === stageId);
 	};
@@ -60,7 +87,9 @@ export function PipelineKanbanBoard({ leads, onStageChange }: PipelineKanbanBoar
 					>
 						<div className="flex items-center justify-between px-1">
 							<div className="flex items-center gap-2">
-								<span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${stage.bg}`}>
+								<span
+									className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${stage.bg}`}
+								>
 									{stage.title}
 								</span>
 								<span className="text-xs text-muted-foreground font-mono font-medium">
@@ -88,14 +117,20 @@ export function PipelineKanbanBoard({ leads, onStageChange }: PipelineKanbanBoar
 													{lead.partnerName && (
 														<div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
 															<Building2 className="size-3 shrink-0" />
-															<span className="truncate">{lead.partnerName}</span>
+															<span className="truncate">
+																{lead.partnerName}
+															</span>
 														</div>
 													)}
 												</div>
 
 												<DropdownMenu>
 													<DropdownMenuTrigger asChild>
-														<Button variant="ghost" size="icon-xs" className="h-6 w-6 shrink-0">
+														<Button
+															variant="ghost"
+															size="icon-xs"
+															className="h-6 w-6 shrink-0"
+														>
 															<MoreHorizontal className="size-3.5" />
 														</Button>
 													</DropdownMenuTrigger>
@@ -145,7 +180,9 @@ export function PipelineKanbanBoard({ leads, onStageChange }: PipelineKanbanBoar
 								))
 							) : (
 								<div className="flex flex-col items-center justify-center h-28 rounded-lg border border-dashed border-border/60 text-center p-3">
-									<p className="text-xs text-muted-foreground">No deals in stage</p>
+									<p className="text-xs text-muted-foreground">
+										No deals in stage
+									</p>
 								</div>
 							)}
 						</div>

@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -25,11 +25,19 @@ async function main() {
 	const { syncCustomers } = await import("../lib/odoo/sync/syncCustomers");
 	const { syncInventory } = await import("../lib/odoo/sync/syncInventory");
 	const { getDailyHealthMetrics } = await import("../lib/business-logic/sales");
-	const { cleanDashboardFilters, getComparisonPeriods } = await import("../lib/business-logic/comparison");
+	const { cleanDashboardFilters, getComparisonPeriods } = await import(
+		"../lib/business-logic/comparison"
+	);
 
-	console.log("\n=======================================================================");
-	console.log("=== MASTER ODOO ↔ NEON ↔ DASHBOARD RECONCILIATION AUDIT (v13.0) ===");
-	console.log("=======================================================================\n");
+	console.log(
+		"\n=======================================================================",
+	);
+	console.log(
+		"=== MASTER ODOO ↔ NEON ↔ DASHBOARD RECONCILIATION AUDIT (v13.0) ===",
+	);
+	console.log(
+		"=======================================================================\n",
+	);
 
 	const client = new OdooClient();
 	if (client.getMockModeStatus()) {
@@ -40,8 +48,10 @@ async function main() {
 	await client.authenticate();
 
 	console.log("PHASE 1: Historical Synchronization & Data Backfill Sweep...");
-	console.log("------------------------------------------------------------------");
-	
+	console.log(
+		"------------------------------------------------------------------",
+	);
+
 	// 1. Sync Products (product.product)
 	console.log("[Reconcile] 1/4 Syncing Product Variants...");
 	const prodCount = await syncProducts(client, null);
@@ -53,7 +63,9 @@ async function main() {
 	console.log(`[Reconcile] Customers synced: ${custCount}`);
 
 	// 3. Sync Sales & POS Orders + Lines
-	console.log("[Reconcile] 3/4 Syncing Sales & POS Orders + Lines (with missing product auto-recovery)...");
+	console.log(
+		"[Reconcile] 3/4 Syncing Sales & POS Orders + Lines (with missing product auto-recovery)...",
+	);
 	const salesCount = await syncSales(client, null);
 	console.log(`[Reconcile] Orders processed: ${salesCount}`);
 
@@ -63,26 +75,55 @@ async function main() {
 	console.log(`[Reconcile] Inventory records synced: ${invCount}`);
 
 	const testDates = [
-		{ label: "31 Jul 2026 IST", dateStr: "2026-07-31", istStartUtc: "2026-07-30 18:30:00", istEndUtc: "2026-07-31 18:29:59" },
-		{ label: "01 Aug 2026 IST", dateStr: "2026-08-01", istStartUtc: "2026-07-31 18:30:00", istEndUtc: "2026-08-01 18:29:59" },
+		{
+			label: "31 Jul 2026 IST",
+			dateStr: "2026-07-31",
+			istStartUtc: "2026-07-30 18:30:00",
+			istEndUtc: "2026-07-31 18:29:59",
+		},
+		{
+			label: "01 Aug 2026 IST",
+			dateStr: "2026-08-01",
+			istStartUtc: "2026-07-31 18:30:00",
+			istEndUtc: "2026-08-01 18:29:59",
+		},
 	];
 
 	for (const target of testDates) {
-		console.log(`\n==================================================================`);
+		console.log(
+			`\n==================================================================`,
+		);
 		console.log(`PHASE 2: 5-Layer Reconciliation Audit for ${target.label}`);
-		console.log(`==================================================================`);
+		console.log(
+			`==================================================================`,
+		);
 
 		// Layer 1: Odoo SaaS Ground Truth
-		const posOrdersOdoo = await client.callKw<any[]>("pos.order", "search_read", [], {
-			domain: [
-				["state", "in", ["paid", "done", "invoiced"]],
-				["date_order", ">=", target.istStartUtc],
-				["date_order", "<=", target.istEndUtc],
-			],
-			fields: ["id", "name", "date_order", "amount_total", "amount_tax", "lines"],
-		});
+		const posOrdersOdoo = await client.callKw<any[]>(
+			"pos.order",
+			"search_read",
+			[],
+			{
+				domain: [
+					["state", "in", ["paid", "done", "invoiced"]],
+					["date_order", ">=", target.istStartUtc],
+					["date_order", "<=", target.istEndUtc],
+				],
+				fields: [
+					"id",
+					"name",
+					"date_order",
+					"amount_total",
+					"amount_tax",
+					"lines",
+				],
+			},
+		);
 		const odooBillCuts = posOrdersOdoo.length;
-		const odooGross = posOrdersOdoo.reduce((sum: number, o: any) => sum + Number(o.amount_total || 0), 0);
+		const odooGross = posOrdersOdoo.reduce(
+			(sum: number, o: any) => sum + Number(o.amount_total || 0),
+			0,
+		);
 
 		// Fetch line items from Odoo
 		const posLineIdsOdoo = posOrdersOdoo.flatMap((o: any) => o.lines || []);
@@ -90,13 +131,29 @@ async function main() {
 		let odooNet = 0;
 		let odooTax = 0;
 		if (posLineIdsOdoo.length > 0) {
-			const linesOdoo = await client.callKw<any[]>("pos.order.line", "search_read", [], {
-				domain: [["id", "in", posLineIdsOdoo]],
-				fields: ["qty", "price_subtotal", "price_subtotal_incl"],
-			});
-			odooUnits = linesOdoo.reduce((sum: number, l: any) => sum + Number(l.qty || 0), 0);
-			odooNet = linesOdoo.reduce((sum: number, l: any) => sum + Number(l.price_subtotal || 0), 0);
-			odooTax = linesOdoo.reduce((sum: number, l: any) => sum + (Number(l.price_subtotal_incl || 0) - Number(l.price_subtotal || 0)), 0);
+			const linesOdoo = await client.callKw<any[]>(
+				"pos.order.line",
+				"search_read",
+				[],
+				{
+					domain: [["id", "in", posLineIdsOdoo]],
+					fields: ["qty", "price_subtotal", "price_subtotal_incl"],
+				},
+			);
+			odooUnits = linesOdoo.reduce(
+				(sum: number, l: any) => sum + Number(l.qty || 0),
+				0,
+			);
+			odooNet = linesOdoo.reduce(
+				(sum: number, l: any) => sum + Number(l.price_subtotal || 0),
+				0,
+			);
+			odooTax = linesOdoo.reduce(
+				(sum: number, l: any) =>
+					sum +
+					(Number(l.price_subtotal_incl || 0) - Number(l.price_subtotal || 0)),
+				0,
+			);
 		}
 
 		// Layer 2: Neon PostgreSQL Raw Tables
@@ -145,7 +202,11 @@ async function main() {
 			categoryScope: "all",
 		});
 		const periods = getComparisonPeriods(filters);
-		const dailyHealth = await getDailyHealthMetrics(sql as any, periods, filters);
+		const dailyHealth = await getDailyHealthMetrics(
+			sql as any,
+			periods,
+			filters,
+		);
 		const apiCollection = dailyHealth.salesKpis.collection.current;
 		const apiNetRevenue = dailyHealth.salesKpis.revenue.current;
 		const apiBillCuts = dailyHealth.salesKpis.billCuts.current;
@@ -193,14 +254,26 @@ async function main() {
 		const unitsDiff = Math.abs(odooUnits - apiUnits);
 
 		console.log(`\nResults for ${target.label}:`);
-		console.log(`- Revenue Difference: ₹${revDiff.toFixed(2)} ${revDiff === 0 ? "✅ PASS" : "❌ FAIL"}`);
-		console.log(`- Bill Count Difference: ${billDiff} ${billDiff === 0 ? "✅ PASS" : "❌ FAIL"}`);
-		console.log(`- Units Difference: ${unitsDiff} ${unitsDiff === 0 ? "✅ PASS" : "❌ FAIL"}`);
+		console.log(
+			`- Revenue Difference: ₹${revDiff.toFixed(2)} ${revDiff === 0 ? "✅ PASS" : "❌ FAIL"}`,
+		);
+		console.log(
+			`- Bill Count Difference: ${billDiff} ${billDiff === 0 ? "✅ PASS" : "❌ FAIL"}`,
+		);
+		console.log(
+			`- Units Difference: ${unitsDiff} ${unitsDiff === 0 ? "✅ PASS" : "❌ FAIL"}`,
+		);
 	}
 
-	console.log("\n=======================================================================");
-	console.log("FINAL STATUS: Odoo SaaS == Neon PostgreSQL == sales_fact_v == Dashboard API");
-	console.log("=======================================================================\n");
+	console.log(
+		"\n=======================================================================",
+	);
+	console.log(
+		"FINAL STATUS: Odoo SaaS == Neon PostgreSQL == sales_fact_v == Dashboard API",
+	);
+	console.log(
+		"=======================================================================\n",
+	);
 }
 
 main().catch(console.error);

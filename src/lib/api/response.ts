@@ -19,7 +19,9 @@ export function createApiResponse<T>(
 	meta: { requestId: string; startTime: number; version?: string },
 	status = 200,
 ): NextResponse<ApiResponse<T>> {
-	const executionTimeMs = Number((performance.now() - meta.startTime).toFixed(2));
+	const executionTimeMs = Number(
+		(performance.now() - meta.startTime).toFixed(2),
+	);
 	const payload: ApiResponse<T> = {
 		success: true,
 		data,
@@ -39,8 +41,13 @@ export function createApiErrorResponse(
 	meta: { requestId: string; startTime: number },
 	status = 500,
 ): NextResponse<ApiResponse<null>> {
-	const executionTimeMs = Number((performance.now() - meta.startTime).toFixed(2));
-	const errorList = typeof errors === "string" ? [{ code: "INTERNAL_ERROR", message: errors }] : errors;
+	const executionTimeMs = Number(
+		(performance.now() - meta.startTime).toFixed(2),
+	);
+	const errorList =
+		typeof errors === "string"
+			? [{ code: "INTERNAL_ERROR", message: errors }]
+			: errors;
 
 	const payload: ApiResponse<null> = {
 		success: false,

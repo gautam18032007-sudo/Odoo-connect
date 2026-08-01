@@ -27,7 +27,7 @@ const RECENT_HIGHLIGHT_COUNT = 8;
 function formatMonthTick(value: string) {
 	try {
 		const date = new Date(value);
-		if (isNaN(date.getTime())) return value;
+		if (Number.isNaN(date.getTime())) return value;
 		return format(date, "d MMM");
 	} catch {
 		return value;
@@ -37,7 +37,7 @@ function formatMonthTick(value: string) {
 function formatTooltipLabel(value: string) {
 	try {
 		const date = new Date(value);
-		if (isNaN(date.getTime())) return value;
+		if (Number.isNaN(date.getTime())) return value;
 		return format(date, "PPPP");
 	} catch {
 		return value;

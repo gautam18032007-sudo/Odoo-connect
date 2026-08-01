@@ -36,7 +36,7 @@ const trafficConfig = {
 function formatTrafficTooltipLabel(value: string) {
 	try {
 		const date = new Date(value);
-		if (isNaN(date.getTime())) return value;
+		if (Number.isNaN(date.getTime())) return value;
 		return format(date, "do MMMM yyyy");
 	} catch {
 		return value;
@@ -52,13 +52,13 @@ export function StoreTraffic({ data }: { data: any }) {
 		);
 	}, [trends]);
 
-	const firstTimestamp = trends[0]?.date || "";
-	const lastTimestamp = trends.at(-1)?.date || "";
+	const _firstTimestamp = trends[0]?.date || "";
+	const _lastTimestamp = trends.at(-1)?.date || "";
 
 	function formatTrafficTick(value: string) {
 		try {
 			const date = new Date(value);
-			if (isNaN(date.getTime())) return value;
+			if (Number.isNaN(date.getTime())) return value;
 			return format(date, "d MMM");
 		} catch {
 			return value;

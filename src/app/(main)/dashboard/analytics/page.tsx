@@ -54,9 +54,12 @@ export default function Page() {
 		if (sku) params.set("sku", sku);
 		if (categoryScope !== "all") params.set("categoryScope", categoryScope);
 
-		const res = await fetch(`/api/sales/dashboard-extended?${params.toString()}`, {
-			signal,
-		});
+		const res = await fetch(
+			`/api/sales/dashboard-extended?${params.toString()}`,
+			{
+				signal,
+			},
+		);
 		const json = await res.json();
 		if (json.success) {
 			return json.data;

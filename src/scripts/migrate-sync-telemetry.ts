@@ -1,6 +1,6 @@
+import path from "node:path";
 import { neon } from "@neondatabase/serverless";
 import * as dotenv from "dotenv";
-import path from "path";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
@@ -13,7 +13,9 @@ async function migrate() {
 
 	const sql = neon(process.env.DATABASE_URL);
 
-	console.log("Updating sync_telemetry schema for real-time telemetry tracking...");
+	console.log(
+		"Updating sync_telemetry schema for real-time telemetry tracking...",
+	);
 
 	await sql`
 		CREATE TABLE IF NOT EXISTS sync_telemetry (
