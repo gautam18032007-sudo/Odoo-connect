@@ -111,8 +111,18 @@ export function useStabilizedDashboard<T>({
 			}, refreshInterval);
 		}
 
+		const handleRealtimeUpdate = () => {
+			executeFetch(true);
+		};
+		if (typeof window !== "undefined") {
+			window.addEventListener("odoo-sync-updated", handleRealtimeUpdate);
+		}
+
 		return () => {
 			if (intervalId) clearInterval(intervalId);
+			if (typeof window !== "undefined") {
+				window.removeEventListener("odoo-sync-updated", handleRealtimeUpdate);
+			}
 			if (abortControllerRef.current) {
 				abortControllerRef.current.abort();
 			}

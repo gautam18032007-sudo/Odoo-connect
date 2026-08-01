@@ -50,6 +50,9 @@ export function useRealtimeFreshness(
 							"[realtimeFreshness] Webhook event detected. Triggering router.refresh()",
 						);
 						router.refresh();
+						if (typeof window !== "undefined") {
+							window.dispatchEvent(new CustomEvent("odoo-sync-updated"));
+						}
 					}
 					lastProcessedRef.current = lastReceived;
 				}

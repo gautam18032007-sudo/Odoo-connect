@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 import { AppSidebar } from "@/app/(main)/dashboard/_components/sidebar/app-sidebar";
-
+import { RealtimeListener } from "@/components/shared/realtime-listener";
 import { Separator } from "@/components/ui/separator";
 import {
 	SidebarInset,
@@ -14,7 +14,6 @@ import {
 } from "@/lib/preferences/layout";
 import { cn } from "@/lib/utils";
 import { getPreference } from "@/server/server-actions";
-
 import { AccountSwitcher } from "./_components/sidebar/account-switcher";
 import { LayoutControls } from "./_components/sidebar/layout-controls";
 import { SearchDialog } from "./_components/sidebar/search-dialog";
@@ -76,6 +75,7 @@ export default async function Layout({
 				</header>
 				{/* Pages can set data-content-padding="false" to render full-bleed app layouts. */}
 				<div className="min-h-0 min-w-0 flex-1 overflow-x-hidden p-4 has-data-[content-padding=false]:p-0 md:p-6 md:has-data-[content-padding=false]:p-0">
+					<RealtimeListener />
 					{children}
 				</div>
 			</SidebarInset>

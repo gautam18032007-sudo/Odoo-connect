@@ -27,7 +27,17 @@ export async function invalidateDashboardCache(
 		try {
 			revalidateTag(tag, "default");
 		} catch (err) {
-			console.warn(`[revalidate] Tag invalidation warning for '${tag}':`, err);
+			const msg = err instanceof Error ? err.message : String(err);
+			if (msg.includes("static generation store missing")) {
+				console.log(
+					`[revalidate] Background context: tag '${tag}' invalidation deferred to client poll/refetch`,
+				);
+			} else {
+				console.warn(
+					`[revalidate] Tag invalidation warning for '${tag}':`,
+					msg,
+				);
+			}
 		}
 	}
 
@@ -35,10 +45,17 @@ export async function invalidateDashboardCache(
 		try {
 			revalidatePath(pathStr);
 		} catch (err) {
-			console.warn(
-				`[revalidate] Path invalidation warning for '${pathStr}':`,
-				err,
-			);
+			const msg = err instanceof Error ? err.message : String(err);
+			if (msg.includes("static generation store missing")) {
+				console.log(
+					`[revalidate] Background context: path '${pathStr}' invalidation deferred to client poll/refetch`,
+				);
+			} else {
+				console.warn(
+					`[revalidate] Path invalidation warning for '${pathStr}':`,
+					msg,
+				);
+			}
 		}
 	}
 
