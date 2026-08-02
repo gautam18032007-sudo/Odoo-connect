@@ -324,16 +324,22 @@ export async function getLatestTelemetryStatus(): Promise<{
 	maxSecondsAgo: number | null;
 	entityStatuses: Record<string, EntityTelemetryStatus>;
 }> {
+	// Exclude 'heartbeat' rows — they're a liveness ping, not a real sync event
+	// (always 0 records processed). Folding them into this query previously
+	// masked real sync staleness, since a heartbeat written seconds ago would
+	// dominate maxSecondsAgo/lastSyncAt even when the real data was hours stale.
 	const result = await sql`
-		SELECT DISTINCT ON (sync_type) 
+		SELECT DISTINCT ON (sync_type)
 			sync_type, completed_at::text, records_processed, status, error_message,
 			EXTRACT(EPOCH FROM (NOW() - completed_at))::int AS seconds_ago
 		FROM sync_telemetry
+		WHERE sync_type <> 'heartbeat'
 		ORDER BY sync_type, completed_at DESC
 	`;
 
 	const entityStatuses: Record<string, EntityTelemetryStatus> = {};
 	let maxSecondsAgo: number | null = null;
+	let mostRecentCompletedAt: string | null = null;
 	let hasSuccess = false;
 	let hasSyncing = false;
 
@@ -353,11 +359,16 @@ export async function getLatestTelemetryStatus(): Promise<{
 
 		if (row.status === "syncing") hasSyncing = true;
 		if (row.status === "success") hasSuccess = true;
+		// Track the entity with the smallest secondsAgo — i.e. the single most
+		// recently completed real sync — not result[0], which is only the
+		// alphabetically-first sync_type (an unrelated, arbitrary ordering that
+		// previously made `lastSyncAt` contradict `maxSecondsAgo`).
 		if (
 			seconds !== null &&
 			(maxSecondsAgo === null || seconds < maxSecondsAgo)
 		) {
 			maxSecondsAgo = seconds;
+			mostRecentCompletedAt = row.completed_at || null;
 		}
 	}
 
@@ -372,7 +383,7 @@ export async function getLatestTelemetryStatus(): Promise<{
 
 	return {
 		overallStatus,
-		lastSyncAt: result[0]?.completed_at || null,
+		lastSyncAt: mostRecentCompletedAt,
 		maxSecondsAgo,
 		entityStatuses,
 	};

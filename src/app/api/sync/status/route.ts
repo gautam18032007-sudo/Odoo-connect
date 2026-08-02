@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
 import { syncWorkerInstance } from "@/lib/odoo/sync/worker";
-import {
-	getLatestTelemetryStatus,
-	logSyncTelemetry,
-} from "@/lib/repositories/odoo.repository";
+import { getLatestTelemetryStatus } from "@/lib/repositories/odoo.repository";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 function formatHumanTimeAgo(seconds: number | null): string {
-	if (seconds === null || seconds < 0) return "2 sec ago";
-	if (seconds <= 5) return "2 sec ago";
+	if (seconds === null) return "Never synced";
+	if (seconds < 0) return "just now";
 	if (seconds <= 10) return `${seconds} sec ago`;
 	if (seconds <= 30) return `${seconds} sec ago`;
 	if (seconds <= 120) return `${seconds} sec ago`;
@@ -27,45 +24,28 @@ export async function GET() {
 		const workerState = syncWorkerInstance.getState();
 		const telemetry = await getLatestTelemetryStatus();
 
-		// Record automatic heartbeats to ensure telemetry is never stale when worker/system is active
-		const nowIso = new Date().toISOString();
-		let lastSyncAt =
-			telemetry.lastSyncAt || workerState.lastSyncTimestamp || nowIso;
+		// Report the REAL last-sync timestamp — never fabricate one. A stale or
+		// missing timestamp must surface as DELAYED/OFFLINE, not be papered over.
+		const lastSyncAt =
+			telemetry.lastSyncAt || workerState.lastSyncTimestamp || null;
 
-		// Calculate exact seconds elapsed in UTC
-		let secondsAgo = lastSyncAt
+		const secondsAgo = lastSyncAt
 			? Math.max(
 					0,
 					Math.floor((Date.now() - new Date(lastSyncAt).getTime()) / 1000),
 				)
-			: 2;
-
-		// If telemetry timestamp is historical (> 120s) but sync worker/system is actively running, auto-update pulse heartbeat
-		if (secondsAgo > 120 || !telemetry.lastSyncAt) {
-			await logSyncTelemetry(
-				"heartbeat",
-				nowIso,
-				nowIso,
-				"success",
-				0,
-				null,
-				0,
-				0,
-				"active",
-			);
-			lastSyncAt = nowIso;
-			secondsAgo = 2;
-		}
-
-		let formattedStatus: "LIVE" | "FRESH" | "SYNCING" | "DELAYED" | "OFFLINE" =
-			"LIVE";
+			: null;
 
 		// Exact SLA Logic:
+		// no sync ever recorded -> OFFLINE
 		// 0-10s -> LIVE
 		// 10-30s -> FRESH
 		// 30-120s -> SYNCING
 		// >120s -> DELAYED
-		if (secondsAgo <= 10) {
+		let formattedStatus: "LIVE" | "FRESH" | "SYNCING" | "DELAYED" | "OFFLINE";
+		if (secondsAgo === null) {
+			formattedStatus = "OFFLINE";
+		} else if (secondsAgo <= 10) {
 			formattedStatus = "LIVE";
 		} else if (secondsAgo <= 30) {
 			formattedStatus = "FRESH";
@@ -82,7 +62,7 @@ export async function GET() {
 				lastSyncAt,
 				secondsAgo,
 				formattedTimeAgo: formatHumanTimeAgo(secondsAgo),
-				isStale: secondsAgo > 120,
+				isStale: secondsAgo === null || secondsAgo > 120,
 				entityStatuses: telemetry.entityStatuses,
 			},
 		});
@@ -98,15 +78,15 @@ export async function GET() {
 		return response;
 	} catch (error: any) {
 		console.error("Failed to fetch sync status:", error);
-		const nowIso = new Date().toISOString();
+		// Honest failure state — never claim LIVE when the real status is unknown.
 		return NextResponse.json({
 			success: true,
 			data: {
-				status: "LIVE",
-				lastSyncAt: nowIso,
-				secondsAgo: 2,
-				formattedTimeAgo: "2 sec ago",
-				isStale: false,
+				status: "OFFLINE",
+				lastSyncAt: null,
+				secondsAgo: null,
+				formattedTimeAgo: "Unknown",
+				isStale: true,
 			},
 		});
 	}
