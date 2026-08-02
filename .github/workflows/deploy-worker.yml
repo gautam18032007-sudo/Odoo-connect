@@ -1,0 +1,73 @@
+name: Deploy Worker to Oracle Cloud
+
+# TEMPLATE — will not run successfully until these repo secrets exist:
+#   ORACLE_HOST        e.g. 123.45.67.89
+#   ORACLE_USER        e.g. zenzebra
+#   ORACLE_SSH_KEY      private key with access to that host/user
+#   ORACLE_SSH_PORT     optional, defaults to 22
+#
+# Manually triggered by default (workflow_dispatch) rather than on every
+# push to main, since deploying to a single always-on VM isn't something
+# you want racing multiple concurrent pushes. Uncomment the push trigger
+# once you're confident in the flow.
+on:
+  workflow_dispatch: {}
+  # push:
+  #   branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Biome
+        run: npm run lint
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          port: ${{ secrets.ORACLE_SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd /opt/zenzebra-sales-crm
+            git pull origin main
+            npm ci
+            # Pick whichever supervisor this VM uses — example shown for PM2:
+            pm2 restart zenzebra-sync-worker
+            # Alternative supervisors:
+            #   sudo systemctl restart zenzebra-worker
+            #   docker compose -f docker-compose.worker.yml up -d --build
+
+      - name: Verify worker health post-deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          port: ${{ secrets.ORACLE_SSH_PORT || 22 }}
+          script: |
+            cd /opt/zenzebra-sales-crm
+            # Give the freshly-restarted worker time to complete a poll
+            # cycle and write its first heartbeat before checking.
+            for i in 1 2 3 4 5 6; do
+              node scripts/check-worker-health.mjs && exit 0
+              echo "Not healthy yet, retrying in 10s ($i/6)..."
+              sleep 10
+            done
+            echo "Worker did not report healthy after restart."
+            exit 1

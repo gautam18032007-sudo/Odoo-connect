@@ -10,6 +10,19 @@ import { syncSales } from "./syncSales";
 
 /**
  * Executes the entire Odoo Standard to ZenZebra CRM synchronization pipeline.
+ *
+ * @deprecated As of the Oracle-hosted always-on worker
+ * (`src/lib/odoo/sync/worker.ts` + `queue.ts`), this is no longer the
+ * primary sync engine. It has no queue, retry/backoff, dead-letter queue,
+ * or advisory locking — running it automatically alongside the worker would
+ * risk duplicate/racing writes to the same tables. It is retained only as:
+ * (a) a manually-controlled backup path, gated behind
+ * `LEGACY_CRON_SYNC_ENABLED=true` in the three cron routes that call it
+ * (`src/app/api/cron/{route,sync,odoo-sync}.ts` — disabled by default), and
+ * (b) the implementation behind `reconciliation.ts`'s manual, admin-triggered
+ * `runCatchupSweep()`, which is a deliberate one-off action, not an
+ * automatic recurring writer, and is intentionally NOT gated by that flag.
+ * Do not wire this into any new automatic/scheduled trigger.
  */
 export async function runSyncPipeline(): Promise<void> {
 	console.log("==================================================");

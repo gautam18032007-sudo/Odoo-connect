@@ -1,12 +1,29 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createSession, setSessionCookie, verifyPassword } from "@/lib/auth";
 import { sql } from "@/lib/db";
+import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
+
+const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 10;
+const LOGIN_RATE_LIMIT_WINDOW_SECONDS = 5 * 60;
 
 const DUMMY_PASSWORD_HASH =
 	"$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 export async function POST(req: NextRequest) {
 	try {
+		const clientIp = getClientIp(req);
+		const rateLimit = await checkRateLimit(
+			`login:${clientIp}`,
+			LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
+			LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+		);
+		if (!rateLimit.allowed) {
+			return NextResponse.json(
+				{ error: "Too many login attempts. Please try again later." },
+				{ status: 429 },
+			);
+		}
+
 		const body = await req.json();
 		const username =
 			typeof body.username === "string"

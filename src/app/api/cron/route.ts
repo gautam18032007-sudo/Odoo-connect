@@ -26,6 +26,24 @@ export async function GET(req: NextRequest) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
+	// The Oracle-hosted always-on worker (src/lib/odoo/sync/worker.ts) is now
+	// the primary sync engine. This route is a manually-controlled backup
+	// path only — disabled by default so it can never race the worker's
+	// writes, even if Vercel Cron resumes firing. See orchestrator.ts's
+	// @deprecated notice on runSyncPipeline() for the full rationale.
+	if (process.env.LEGACY_CRON_SYNC_ENABLED !== "true") {
+		console.log(
+			"[ODOO_CRON] Skipped — legacy cron sync is disabled (Oracle Worker is primary). Set LEGACY_CRON_SYNC_ENABLED=true to re-enable this backup path.",
+		);
+		return NextResponse.json({
+			success: true,
+			skipped: true,
+			reason:
+				"Legacy cron sync is disabled — Oracle Worker is the primary sync engine. Set LEGACY_CRON_SYNC_ENABLED=true to re-enable this backup path.",
+			timestamp: new Date().toISOString(),
+		});
+	}
+
 	console.log("[ODOO_CRON_EXECUTED]", new Date().toISOString());
 	console.log(
 		"[ODOO_CRON] Starting 1-minute scheduled incremental backup sync...",

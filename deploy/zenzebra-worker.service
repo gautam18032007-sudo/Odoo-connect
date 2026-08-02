@@ -1,0 +1,43 @@
+# systemd unit for the always-on Odoo sync worker — bare-VM alternative to
+# Docker Compose / PM2 (pick ONE supervision strategy, see
+# docs/WORKER_DEPLOYMENT.md). Runs sync-worker.mjs directly via node.
+#
+# Install:
+#   sudo cp deploy/zenzebra-worker.service /etc/systemd/system/
+#   sudo cp .env.worker.example /etc/zenzebra/worker.env   # then fill in real values
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now zenzebra-worker
+#   sudo systemctl status zenzebra-worker
+#   journalctl -u zenzebra-worker -f
+
+[Unit]
+Description=ZenZebra Always-On Odoo Sync Worker
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=zenzebra
+WorkingDirectory=/opt/zenzebra-sales-crm
+EnvironmentFile=/etc/zenzebra/worker.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/zenzebra-sales-crm/sync-worker.mjs
+Restart=always
+RestartSec=5
+# Exponential-ish backoff isn't native to systemd; RestartSec is fixed, but
+# StartLimitBurst/StartLimitIntervalSec stop a genuine crash loop from
+# restarting forever — after 10 restarts in 5 minutes systemd stops trying,
+# surfacing the failure instead of masking it.
+
+# Health is verified externally via scripts/check-worker-health.mjs (cron
+# or a monitoring agent), not a systemd watchdog — the worker has no
+# sd_notify integration and no HTTP port to probe.
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=zenzebra-worker
+
+[Install]
+WantedBy=multi-user.target

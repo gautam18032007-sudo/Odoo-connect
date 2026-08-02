@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { syncWorkerInstance } from "@/lib/odoo/sync/worker";
-import { getLatestTelemetryStatus } from "@/lib/repositories/odoo.repository";
+import {
+	getLatestTelemetryStatus,
+	getWorkerHeartbeat,
+} from "@/lib/repositories/odoo.repository";
+
+// A heartbeat older than this is treated as stale, not as evidence the
+// worker is running — same "never fabricate freshness" principle as the
+// sync telemetry freshness fix.
+const HEARTBEAT_FRESHNESS_SECONDS = 120;
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -21,8 +29,24 @@ function formatHumanTimeAgo(seconds: number | null): string {
 
 export async function GET() {
 	try {
-		const workerState = syncWorkerInstance.getState();
+		const inProcessState = syncWorkerInstance.getState();
 		const telemetry = await getLatestTelemetryStatus();
+
+		// If this process's own worker singleton was never started (e.g. this
+		// API is served by Vercel while the actual worker runs on a separate
+		// host), fall back to the persisted heartbeat instead of reporting a
+		// meaningless idle default — but only if that heartbeat is still fresh.
+		let workerState = inProcessState;
+		let workerSource: "in_process" | "heartbeat" | "none" = "in_process";
+		if (!inProcessState.isRunning) {
+			const heartbeat = await getWorkerHeartbeat("main");
+			if (heartbeat && heartbeat.secondsAgo <= HEARTBEAT_FRESHNESS_SECONDS) {
+				workerState = heartbeat.state as unknown as typeof inProcessState;
+				workerSource = "heartbeat";
+			} else if (!heartbeat) {
+				workerSource = "none";
+			}
+		}
 
 		// Report the REAL last-sync timestamp — never fabricate one. A stale or
 		// missing timestamp must surface as DELAYED/OFFLINE, not be papered over.
@@ -63,6 +87,7 @@ export async function GET() {
 				secondsAgo,
 				formattedTimeAgo: formatHumanTimeAgo(secondsAgo),
 				isStale: secondsAgo === null || secondsAgo > 120,
+				workerSource,
 				entityStatuses: telemetry.entityStatuses,
 			},
 		});

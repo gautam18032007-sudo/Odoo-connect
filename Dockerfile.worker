@@ -1,0 +1,40 @@
+# syntax=docker/dockerfile:1
+#
+# Containerizes the always-on Odoo sync worker ONLY — not the Next.js web
+# app (that stays on Vercel; see the root Dockerfile, which targets Vercel's
+# standalone-output replacement and is unrelated to this file).
+#
+# Entrypoint is sync-worker.mjs, unchanged from how it already runs locally
+# (`npm run sync:worker`) — this image just runs the same command in a
+# supervised, restart-on-crash container on an always-on host.
+
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+# Plain `npm ci` (not --omit=dev): ts-node/typescript are devDependencies but
+# are required at runtime here, since the worker runs .ts directly.
+RUN npm ci
+
+# The worker runs TypeScript directly via ts-node (see sync-worker.mjs), so
+# devDependencies (ts-node, typescript) must stay installed at runtime —
+# unlike the web app's Dockerfile, there is no separate build step here.
+COPY tsconfig.json tsconfig.scripts.json ./
+COPY src ./src
+COPY sync-worker.mjs ./
+COPY scripts ./scripts
+
+RUN addgroup --system --gid 1001 nodejs \
+	&& adduser --system --uid 1001 zenzebra-worker \
+	&& chown -R zenzebra-worker:nodejs /app
+
+USER zenzebra-worker
+
+ENV NODE_ENV=production
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+	CMD node scripts/check-worker-health.mjs || exit 1
+
+CMD ["node", "sync-worker.mjs"]

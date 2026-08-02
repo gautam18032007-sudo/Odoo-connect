@@ -1,11 +1,34 @@
 import { sql } from "../../db";
 import { refreshMaterializedViews } from "../../materialized-views";
-import { logSyncTelemetry } from "../../repositories/odoo.repository";
+import {
+	insertDeadLetterJob,
+	logSyncTelemetry,
+} from "../../repositories/odoo.repository";
 import type { OdooClient } from "../client";
 import { syncCustomers } from "./syncCustomers";
 import { syncInventory } from "./syncInventory";
 import { syncProducts } from "./syncProducts";
 import { syncSales } from "./syncSales";
+
+const BASE_BACKOFF_MS = 2000;
+const MAX_BACKOFF_MS = 30000;
+
+/**
+ * Classifies a sync failure so permanent errors (bad request, validation,
+ * access denied) dead-letter immediately instead of burning through retries
+ * that can never succeed. Anything not recognized as permanent is treated
+ * as transient (network blip, timeout, session expiry) and retried as before.
+ */
+export function classifyError(message: string): "transient" | "permanent" {
+	if (
+		/RPC Error|invalid|does not exist|access denied|forbidden|403/i.test(
+			message,
+		)
+	) {
+		return "permanent";
+	}
+	return "transient";
+}
 
 export type QueueJobType =
 	| "products"
@@ -24,6 +47,7 @@ export interface QueueJob {
 	attempts: number;
 	maxRetries: number;
 	createdAt: number;
+	nextRetryAt?: number;
 }
 
 export class SyncQueueManager {
@@ -136,13 +160,48 @@ export class SyncQueueManager {
 		let totalProcessedRecords = 0;
 		let hasChanges = false;
 		const errors: string[] = [];
+		const now = Date.now();
 
-		// Group queued jobs by priority
-		const highPriority = this.queue.filter((j) => j.priority === "HIGH");
-		const mediumPriority = this.queue.filter((j) => j.priority === "MEDIUM");
-		const lowPriority = this.queue.filter((j) => j.priority === "LOW");
+		// Jobs backing off after a transient failure stay in the queue
+		// untouched this cycle; only "due" jobs get processed.
+		const isDue = (j: QueueJob) => (j.nextRetryAt ?? 0) <= now;
+		const notDue = this.queue.filter((j) => !isDue(j));
+		const due = this.queue.filter(isDue);
 
-		this.queue = [];
+		const highPriority = due.filter((j) => j.priority === "HIGH");
+		const mediumPriority = due.filter((j) => j.priority === "MEDIUM");
+		const lowPriority = due.filter((j) => j.priority === "LOW");
+
+		this.queue = notDue;
+
+		const handleFailure = async (job: QueueJob, reason: unknown) => {
+			const errMsg = reason instanceof Error ? reason.message : String(reason);
+			errors.push(`${job.type}: ${errMsg}`);
+
+			const classification = classifyError(errMsg);
+			const exhausted = job.attempts >= job.maxRetries;
+
+			if (classification === "permanent" || exhausted) {
+				this.deadLetterQueue.push({ ...job, error: errMsg });
+				try {
+					await insertDeadLetterJob({
+						jobType: job.type,
+						attempts: job.attempts,
+						errorMessage: errMsg,
+						lastSyncTime: job.lastSyncTime,
+					});
+				} catch (dlqErr) {
+					console.error(
+						"[SyncQueueManager] Failed to persist dead-letter job:",
+						dlqErr,
+					);
+				}
+			} else {
+				job.nextRetryAt =
+					now + Math.min(BASE_BACKOFF_MS * 2 ** job.attempts, MAX_BACKOFF_MS);
+				this.queue.push(job);
+			}
+		};
 
 		// 1. Process HIGH priority (Inventory & Sales) simultaneously in parallel
 		if (highPriority.length > 0) {
@@ -156,12 +215,7 @@ export class SyncQueueManager {
 					totalProcessedRecords += res.value;
 					if (res.value > 0) hasChanges = true;
 				} else {
-					errors.push(`${job.type}: ${res.reason?.message || res.reason}`);
-					if (job.attempts < job.maxRetries) {
-						this.queue.push(job);
-					} else {
-						this.deadLetterQueue.push({ ...job, error: String(res.reason) });
-					}
+					await handleFailure(job, res.reason);
 				}
 			}
 		}
@@ -178,12 +232,7 @@ export class SyncQueueManager {
 					totalProcessedRecords += res.value;
 					if (res.value > 0) hasChanges = true;
 				} else {
-					errors.push(`${job.type}: ${res.reason?.message || res.reason}`);
-					if (job.attempts < job.maxRetries) {
-						this.queue.push(job);
-					} else {
-						this.deadLetterQueue.push({ ...job, error: String(res.reason) });
-					}
+					await handleFailure(job, res.reason);
 				}
 			}
 		}
@@ -195,7 +244,7 @@ export class SyncQueueManager {
 				totalProcessedRecords += count;
 				if (count > 0) hasChanges = true;
 			} catch (err: any) {
-				errors.push(`${job.type}: ${err.message}`);
+				await handleFailure(job, err);
 			}
 		}
 

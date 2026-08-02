@@ -392,3 +392,110 @@ export async function getLatestTelemetryStatus(): Promise<{
 		entityStatuses,
 	};
 }
+
+// ── Persisted sync dead-letter queue ─────────────────────────────────
+// Mirrors the existing webhook_events dead-letter pattern, but for jobs
+// that exhaust retries in the polling SyncQueueManager — previously only
+// held in an in-memory array, lost on every worker restart.
+
+export interface DeadLetterJobRow {
+	id: number;
+	jobType: string;
+	attempts: number;
+	errorMessage: string;
+	lastSyncTime: string | null;
+	createdAt: string;
+	resolvedAt: string | null;
+	status: "dead_letter" | "retried" | "resolved";
+}
+
+export async function insertDeadLetterJob(job: {
+	jobType: string;
+	attempts: number;
+	errorMessage: string;
+	lastSyncTime: string | null;
+}): Promise<void> {
+	await sql`
+		INSERT INTO sync_dead_letter_queue (job_type, attempts, error_message, last_sync_time)
+		VALUES (${job.jobType}, ${job.attempts}, ${job.errorMessage}, ${job.lastSyncTime})
+	`;
+}
+
+export async function getDeadLetterJobs(
+	status: "dead_letter" | "retried" | "resolved" = "dead_letter",
+): Promise<DeadLetterJobRow[]> {
+	const rows = await sql`
+		SELECT id, job_type, attempts, error_message, last_sync_time,
+			created_at::text, resolved_at::text, status
+		FROM sync_dead_letter_queue
+		WHERE status = ${status}
+		ORDER BY created_at DESC
+	`;
+	return rows.map((r) => ({
+		id: Number(r.id),
+		jobType: String(r.job_type),
+		attempts: Number(r.attempts),
+		errorMessage: String(r.error_message),
+		lastSyncTime: r.last_sync_time || null,
+		createdAt: r.created_at,
+		resolvedAt: r.resolved_at || null,
+		status: r.status,
+	}));
+}
+
+export async function markDeadLetterResolved(id: number): Promise<void> {
+	await sql`
+		UPDATE sync_dead_letter_queue
+		SET status = 'resolved', resolved_at = NOW()
+		WHERE id = ${id}
+	`;
+}
+
+// ── Persisted worker heartbeat ───────────────────────────────────────
+// Lets /api/sync/status and /api/health report the real state of a worker
+// process running on a separate host, instead of an in-process singleton
+// that may never have been started on the machine serving the API request.
+
+export async function upsertWorkerHeartbeat(
+	workerId: string,
+	hostname: string,
+	state: object,
+): Promise<void> {
+	await sql`
+		INSERT INTO worker_heartbeat (worker_id, hostname, state, updated_at)
+		VALUES (${workerId}, ${hostname}, ${JSON.stringify(state)}, NOW())
+		ON CONFLICT (worker_id) DO UPDATE SET
+			hostname = EXCLUDED.hostname,
+			state = EXCLUDED.state,
+			updated_at = NOW()
+	`;
+}
+
+export interface WorkerHeartbeatRow {
+	workerId: string;
+	hostname: string | null;
+	state: Record<string, unknown>;
+	updatedAt: string;
+	secondsAgo: number;
+}
+
+export async function getWorkerHeartbeat(
+	workerId = "main",
+): Promise<WorkerHeartbeatRow | null> {
+	const rows = await sql`
+		SELECT worker_id, hostname, state, updated_at::text,
+			EXTRACT(EPOCH FROM (NOW() - updated_at))::int AS seconds_ago
+		FROM worker_heartbeat
+		WHERE worker_id = ${workerId}
+		LIMIT 1
+	`;
+	if (rows.length === 0) return null;
+	const row = rows[0];
+	return {
+		workerId: String(row.worker_id),
+		hostname: row.hostname || null,
+		state: row.state,
+		updatedAt: row.updated_at,
+		secondsAgo: Number(row.seconds_ago || 0),
+	};
+}

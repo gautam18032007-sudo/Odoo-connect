@@ -1,0 +1,35 @@
+# Runs the always-on Odoo sync worker in a container on an always-on host
+# (e.g. an Oracle Cloud VM). Does NOT run the Next.js web app — that stays
+# on Vercel. Pick this OR PM2 (ecosystem.config.js) OR systemd
+# (deploy/zenzebra-worker.service) as your supervision strategy — running
+# more than one against the same worker would double-process the sync
+# queue. See docs/WORKER_DEPLOYMENT.md.
+#
+# Usage:
+#   cp .env.worker.example .env.worker   # fill in real values
+#   docker compose -f docker-compose.worker.yml up -d
+#   docker compose -f docker-compose.worker.yml logs -f
+
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: zenzebra-sync-worker
+    restart: unless-stopped
+    env_file:
+      - .env.worker
+    # No ports exposed: the worker has no HTTP server. Liveness is checked
+    # via the worker_heartbeat DB table (see scripts/check-worker-health.mjs),
+    # not a port.
+    healthcheck:
+      test: ["CMD", "node", "scripts/check-worker-health.mjs"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

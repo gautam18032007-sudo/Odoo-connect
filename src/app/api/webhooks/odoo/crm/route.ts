@@ -1,5 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
+
+const WEBHOOK_RATE_LIMIT_MAX_ATTEMPTS = 120;
+const WEBHOOK_RATE_LIMIT_WINDOW_SECONDS = 60;
 
 /**
  * POST /api/webhooks/odoo/crm
@@ -39,6 +43,15 @@ function verifyWebhookSecret(req: NextRequest): boolean {
 export async function POST(req: NextRequest) {
 	if (!verifyWebhookSecret(req)) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+	}
+
+	const rateLimit = await checkRateLimit(
+		`webhook:${getClientIp(req)}`,
+		WEBHOOK_RATE_LIMIT_MAX_ATTEMPTS,
+		WEBHOOK_RATE_LIMIT_WINDOW_SECONDS,
+	);
+	if (!rateLimit.allowed) {
+		return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 	}
 
 	let body: any;

@@ -35,6 +35,14 @@ yarn-error.log*
 .env*.local
 .env
 .env.production
+.env.worker
+
+# deploy/*.sh runtime artifacts — local logs, DB dumps, and per-VM state,
+# none of which belong in git.
+deploy/logs/
+deploy/backups/
+deploy/.supervisor
+deploy/.last_good_commit
 
 # vercel
 .vercel

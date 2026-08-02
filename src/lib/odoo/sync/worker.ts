@@ -1,6 +1,12 @@
-import { getLastSyncTime } from "../../repositories/odoo.repository";
+import * as os from "node:os";
+import {
+	getLastSyncTime,
+	upsertWorkerHeartbeat,
+} from "../../repositories/odoo.repository";
 import { OdooClient } from "../client";
 import { SyncQueueManager } from "./queue";
+
+const WORKER_ID = "main";
 
 export interface SyncWorkerState {
 	isRunning: boolean;
@@ -52,6 +58,28 @@ export class AlwaysOnSyncWorker {
 	public stop(): void {
 		console.log("🛑 Stopping Always-On Odoo Sync Worker...");
 		this.shouldStop = true;
+	}
+
+	private triggerCacheRevalidation(): void {
+		const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+		const secret = process.env.INTERNAL_API_SECRET;
+		if (!appUrl || !secret) {
+			return; // Not configured — dashboard falls back to client polling.
+		}
+
+		fetch(`${appUrl.replace(/\/$/, "")}/api/internal/revalidate`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"x-internal-secret": secret,
+			},
+			body: "{}",
+		}).catch((err) => {
+			console.warn(
+				"[AlwaysOnSyncWorker] Cache revalidation call failed (non-fatal):",
+				err.message,
+			);
+		});
 	}
 
 	public async start(): Promise<void> {
@@ -117,6 +145,12 @@ export class AlwaysOnSyncWorker {
 					} else {
 						this.state.currentIntervalMs = FAST_POLL_INTERVAL_MS;
 					}
+
+					// Bridge to Next.js cache invalidation — revalidateTag/Path only
+					// work inside a real request context, which this standalone
+					// process isn't, so we call into one via HTTP instead.
+					// Fire-and-forget: a failure here must never stall the poll loop.
+					this.triggerCacheRevalidation();
 				} else {
 					// Adaptive polling calculation
 					const timeSinceLastChange =
@@ -147,6 +181,18 @@ export class AlwaysOnSyncWorker {
 				this.state.currentIntervalMs = errorBackoff;
 			}
 
+			// Persist heartbeat so /api/sync/status and /api/health can report
+			// this worker's real state even when it runs on a separate host.
+			// Fire-and-forget — a heartbeat write failure must never stall sync.
+			upsertWorkerHeartbeat(WORKER_ID, os.hostname(), this.getState()).catch(
+				(err) => {
+					console.warn(
+						"[AlwaysOnSyncWorker] Failed to persist heartbeat:",
+						err.message,
+					);
+				},
+			);
+
 			// Calculate remaining sleep time for consistent loop pacing
 			const elapsed = Date.now() - cycleStart;
 			const sleepTime = Math.max(0, this.state.currentIntervalMs - elapsed);
@@ -169,6 +215,6 @@ const globalForWorker = globalThis as unknown as {
 export const syncWorkerInstance =
 	globalForWorker.__odooSyncWorkerInstance || new AlwaysOnSyncWorker();
 
-if (process.env.NODE_NODE_ENV !== "production") {
+if (process.env.NODE_ENV !== "production") {
 	globalForWorker.__odooSyncWorkerInstance = syncWorkerInstance;
 }

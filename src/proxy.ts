@@ -9,6 +9,9 @@ const publicPaths = [
 	"/api/auth/verify",
 	"/api/public",
 	"/api/webhooks",
+	// Called by the Oracle-hosted worker process, not a logged-in browser —
+	// self-authenticates via INTERNAL_API_SECRET, same pattern as webhooks.
+	"/api/internal",
 ];
 
 function isPublicPath(pathname: string): boolean {
