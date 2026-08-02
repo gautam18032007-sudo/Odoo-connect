@@ -25,6 +25,7 @@ export interface StoreInventoryBreakdown {
 	itemCount: number;
 	totalQuantity: number;
 	valuationMrp: number;
+	locationMapped: boolean;
 }
 
 export interface FastSlowItem {
@@ -125,49 +126,20 @@ export async function getStoreInventoryBreakdown(): Promise<
 	StoreInventoryBreakdown[]
 > {
 	const result = await sql`
-		SELECT 
+		SELECT
 			s.id AS store_id,
 			s.name AS store_name,
 			COALESCE(s.code, 'STORE') AS store_code,
+			s.location_id IS NOT NULL AS location_mapped,
 			COUNT(DISTINCT fi.product_id) AS item_count,
 			COALESCE(SUM(fi.quantity), 0) AS total_qty,
 			COALESCE(SUM(fi.quantity * p.list_price), 0) AS valuation_mrp
 		FROM dim_stores s
-		LEFT JOIN fact_inventory fi ON s.id = fi.location_id
+		LEFT JOIN fact_inventory fi ON s.location_id = fi.location_id
 		LEFT JOIN dim_products p ON fi.product_id = p.id
-		GROUP BY s.id, s.name, s.code
+		GROUP BY s.id, s.name, s.code, s.location_id
 		ORDER BY valuation_mrp DESC
 	`;
-
-	if (result.length === 0) {
-		// Fallback dataset if stores table is not populated yet
-		return [
-			{
-				storeId: 1,
-				storeName: "ZenZebra Flagship Store",
-				storeCode: "ZZ",
-				itemCount: 142,
-				totalQuantity: 1250,
-				valuationMrp: 450000,
-			},
-			{
-				storeId: 2,
-				storeName: "KLJ Noida Store",
-				storeCode: "KLJ",
-				itemCount: 98,
-				totalQuantity: 840,
-				valuationMrp: 280000,
-			},
-			{
-				storeId: 3,
-				storeName: "Smartworks Noida Store",
-				storeCode: "SWN",
-				itemCount: 110,
-				totalQuantity: 960,
-				valuationMrp: 340000,
-			},
-		];
-	}
 
 	return result.map((r) => ({
 		storeId: Number(r.store_id),
@@ -176,18 +148,45 @@ export async function getStoreInventoryBreakdown(): Promise<
 		itemCount: Number(r.item_count || 0),
 		totalQuantity: Number(r.total_qty || 0),
 		valuationMrp: Number(r.valuation_mrp || 0),
+		locationMapped: Boolean(r.location_mapped),
 	}));
+}
+
+function mapVelocityRow(r: Record<string, any>): FastSlowItem {
+	const sold = Number(r.units_sold_30d || 0);
+	const dailyVelocity = sold / 30;
+	let category: "fast" | "slow" | "dead" | "normal" = "normal";
+	if (dailyVelocity >= 3) category = "fast";
+	else if (dailyVelocity <= 0.2) category = "slow";
+
+	return {
+		productId: Number(r.id),
+		name: String(r.name),
+		sku: String(r.sku),
+		category: String(r.category),
+		qtyOnHand: Number(r.qty_available || 0),
+		unitsSold30d: sold,
+		velocityDaily: Number(dailyVelocity.toFixed(1)),
+		turnoverCategory: category,
+		listPrice: Number(r.list_price || 0),
+	};
 }
 
 /**
  * Fast & Slow moving products.
+ *
+ * These are two independent queries, not one shared result set sliced two
+ * ways. Previously both lists came from the same top-20-by-sales query
+ * (fastMoving = first 10, slowMoving = last 10 reversed) — so "Slow Moving"
+ * was actually ranks #11-20 of the best sellers, never genuine near-zero-sales
+ * dead stock from the wider catalog.
  */
 export async function getFastSlowMovingProducts(): Promise<{
 	fastMoving: FastSlowItem[];
 	slowMoving: FastSlowItem[];
 }> {
-	const result = await sql`
-		SELECT 
+	const fastResult = await sql`
+		SELECT
 			p.id,
 			p.name,
 			COALESCE(p.default_code, 'SKU-' || p.id) AS sku,
@@ -199,33 +198,114 @@ export async function getFastSlowMovingProducts(): Promise<{
 		LEFT JOIN fact_sales_lines sl ON p.id = sl.product_id
 		WHERE p.active = true
 		GROUP BY p.id, p.name, p.default_code, p.category, p.qty_available, p.list_price
+		HAVING COALESCE(SUM(sl.qty), 0) > 0
 		ORDER BY units_sold_30d DESC
-		LIMIT 20
+		LIMIT 10
 	`;
 
-	const items: FastSlowItem[] = result.map((r) => {
-		const sold = Number(r.units_sold_30d || 0);
-		const dailyVelocity = sold / 30;
-		let category: "fast" | "slow" | "dead" | "normal" = "normal";
-		if (dailyVelocity >= 3) category = "fast";
-		else if (dailyVelocity <= 0.2) category = "slow";
-
-		return {
-			productId: Number(r.id),
-			name: String(r.name),
-			sku: String(r.sku),
-			category: String(r.category),
-			qtyOnHand: Number(r.qty_available || 0),
-			unitsSold30d: sold,
-			velocityDaily: Number(dailyVelocity.toFixed(1)),
-			turnoverCategory: category,
-			listPrice: Number(r.list_price || 0),
-		};
-	});
+	// Only products with stock on hand belong here — a zero-sale product with
+	// zero stock isn't "slow moving," it's just gone.
+	const slowResult = await sql`
+		SELECT
+			p.id,
+			p.name,
+			COALESCE(p.default_code, 'SKU-' || p.id) AS sku,
+			COALESCE(p.category, 'General') AS category,
+			p.qty_available,
+			p.list_price,
+			COALESCE(SUM(sl.qty), 0) AS units_sold_30d
+		FROM dim_products p
+		LEFT JOIN fact_sales_lines sl ON p.id = sl.product_id
+		WHERE p.active = true AND p.qty_available > 0
+		GROUP BY p.id, p.name, p.default_code, p.category, p.qty_available, p.list_price
+		ORDER BY units_sold_30d ASC
+		LIMIT 10
+	`;
 
 	return {
-		fastMoving: items.filter((i) => i.unitsSold30d > 0).slice(0, 10),
-		slowMoving: items.slice().reverse().slice(0, 10),
+		fastMoving: fastResult.map(mapVelocityRow),
+		slowMoving: slowResult.map(mapVelocityRow),
+	};
+}
+
+export interface ItemVelocityPagedParams {
+	page: number;
+	pageSize: number;
+	sortBy: "sales" | "velocity" | "soh" | "name";
+	sortDir: "asc" | "desc";
+	search?: string;
+}
+
+export interface ItemVelocityPagedResult {
+	items: FastSlowItem[];
+	totalCount: number;
+	page: number;
+	pageSize: number;
+}
+
+/**
+ * Full-catalog paginated/sortable/searchable product velocity list — unlike
+ * getFastSlowMovingProducts() (top-10 curated lists), this covers every
+ * active SKU via OFFSET/LIMIT rather than a fixed top-20 window.
+ */
+export async function getItemVelocityPaged(
+	params: ItemVelocityPagedParams,
+): Promise<ItemVelocityPagedResult> {
+	const page = Math.max(1, params.page);
+	const pageSize = Math.min(100, Math.max(1, params.pageSize));
+	const offset = (page - 1) * pageSize;
+	const search = params.search?.trim() || "";
+
+	// sortBy/sortDir come from user-controlled query params — never
+	// interpolate them directly into SQL. Map to a fixed allow-list of SQL
+	// column expressions instead.
+	const sortColumn: Record<ItemVelocityPagedParams["sortBy"], string> = {
+		sales: "units_sold_30d",
+		velocity: "units_sold_30d", // velocity is a fixed function of sales (sold / 30)
+		soh: "qty_available",
+		name: "name",
+	};
+	const orderColumn = sortColumn[params.sortBy] || "units_sold_30d";
+	const orderDir = params.sortDir === "asc" ? "ASC" : "DESC";
+
+	const searchPattern = `%${search}%`;
+	const whereSearch = search
+		? `AND (p.name ILIKE $1 OR p.default_code ILIKE $1)`
+		: "";
+
+	const countQuery = `
+		SELECT COUNT(*) AS total
+		FROM dim_products p
+		WHERE p.active = true ${whereSearch}
+	`;
+	const countParams = search ? [searchPattern] : [];
+	const countResult = await (sql as any).query(countQuery, countParams);
+	const totalCount = Number(countResult[0]?.total || 0);
+
+	const itemsQuery = `
+		SELECT
+			p.id,
+			p.name,
+			COALESCE(p.default_code, 'SKU-' || p.id) AS sku,
+			COALESCE(p.category, 'General') AS category,
+			p.qty_available,
+			p.list_price,
+			COALESCE(SUM(sl.qty), 0) AS units_sold_30d
+		FROM dim_products p
+		LEFT JOIN fact_sales_lines sl ON p.id = sl.product_id
+		WHERE p.active = true ${whereSearch}
+		GROUP BY p.id, p.name, p.default_code, p.category, p.qty_available, p.list_price
+		ORDER BY ${orderColumn} ${orderDir}
+		LIMIT ${pageSize} OFFSET ${offset}
+	`;
+	const itemsParams = search ? [searchPattern] : [];
+	const itemsResult = await (sql as any).query(itemsQuery, itemsParams);
+
+	return {
+		items: itemsResult.map(mapVelocityRow),
+		totalCount,
+		page,
+		pageSize,
 	};
 }
 
@@ -245,7 +325,7 @@ export async function getReorderRecommendations(): Promise<
 			COALESCE(SUM(sl.qty), 0) AS units_sold_30d
 		FROM dim_products p
 		LEFT JOIN fact_sales_lines sl ON p.id = sl.product_id
-		WHERE p.active = true AND p.qty_available <= 15
+		WHERE p.active = true AND p.qty_available <= 15 AND p.is_storable = true
 		GROUP BY p.id, p.name, p.default_code, p.category, p.qty_available
 		ORDER BY p.qty_available ASC
 		LIMIT 10

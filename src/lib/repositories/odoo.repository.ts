@@ -4,6 +4,7 @@ export interface OdooStore {
 	id: number;
 	name: string;
 	code?: string;
+	locationId?: number;
 }
 
 export interface OdooProduct {
@@ -17,6 +18,7 @@ export interface OdooProduct {
 	freeQty?: number;
 	active: boolean;
 	category?: string;
+	isStorable?: boolean;
 }
 
 export interface OdooCustomer {
@@ -69,11 +71,12 @@ export async function upsertStores(stores: OdooStore[]): Promise<void> {
 	if (stores.length === 0) return;
 	for (const store of stores) {
 		await sql`
-			INSERT INTO dim_stores (id, name, code)
-			VALUES (${store.id}, ${store.name}, ${store.code || null})
+			INSERT INTO dim_stores (id, name, code, location_id)
+			VALUES (${store.id}, ${store.name}, ${store.code || null}, ${store.locationId ?? null})
 			ON CONFLICT (id) DO UPDATE SET
 				name = EXCLUDED.name,
 				code = EXCLUDED.code,
+				location_id = COALESCE(EXCLUDED.location_id, dim_stores.location_id),
 				updated_at = NOW()
 		`;
 	}
@@ -84,12 +87,12 @@ export async function upsertProducts(products: OdooProduct[]): Promise<void> {
 	for (const prod of products) {
 		await sql`
 			INSERT INTO dim_products (
-				id, name, default_code, barcode, list_price, cost_price, qty_available, free_qty, active, category
+				id, name, default_code, barcode, list_price, cost_price, qty_available, free_qty, active, category, is_storable
 			) VALUES (
 				${prod.id}, ${prod.name}, ${prod.defaultCode || null}, ${prod.barcode || null},
 				${Number(prod.listPrice || 0)}, ${Number(prod.costPrice || 0)},
 				${Number(prod.qtyAvailable || 0)}, ${Number(prod.freeQty || 0)},
-				${prod.active}, ${prod.category || null}
+				${prod.active}, ${prod.category || null}, ${prod.isStorable ?? true}
 			)
 			ON CONFLICT (id) DO UPDATE SET
 				name = EXCLUDED.name,
@@ -101,6 +104,7 @@ export async function upsertProducts(products: OdooProduct[]): Promise<void> {
 				free_qty = EXCLUDED.free_qty,
 				active = EXCLUDED.active,
 				category = EXCLUDED.category,
+				is_storable = EXCLUDED.is_storable,
 				updated_at = NOW()
 		`;
 	}

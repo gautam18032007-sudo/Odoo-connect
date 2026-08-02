@@ -1,8 +1,12 @@
 "use client";
 
+import { motion, useReducedMotion } from "framer-motion";
 import {
 	Activity,
 	AlertCircle,
+	ArrowDown,
+	ArrowUp,
+	ArrowUpDown,
 	Boxes,
 	CheckCircle2,
 	Clock,
@@ -13,7 +17,7 @@ import {
 	TrendingUp,
 	Zap,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,9 +27,28 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
+import { MetricCard } from "@/components/ui/metric-card";
+import {
+	Pagination,
+	PaginationContent,
+	PaginationEllipsis,
+	PaginationItem,
+	PaginationLink,
+	PaginationNext,
+	PaginationPrevious,
+} from "@/components/ui/pagination";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/utils";
 
@@ -54,6 +77,7 @@ interface InventoryDashboardData {
 		itemCount: number;
 		totalQuantity: number;
 		valuationMrp: number;
+		locationMapped: boolean;
 	}>;
 	fastMoving: Array<{
 		productId: number;
@@ -103,8 +127,126 @@ interface InventoryDashboardData {
 
 import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
 
+interface VelocityItem {
+	productId: number;
+	name: string;
+	sku: string;
+	category: string;
+	qtyOnHand: number;
+	unitsSold30d: number;
+	velocityDaily: number;
+	turnoverCategory: string;
+	listPrice: number;
+}
+
+type VelocitySortBy = "sales" | "velocity" | "soh" | "name";
+type VelocitySortDir = "asc" | "desc";
+
+const ALL_PRODUCTS_PAGE_SIZE = 25;
+
+// Windowed page-number list for the pagination bar: first, last, current ±1,
+// with ellipses filling the gaps once the catalog spans more than 7 pages.
+function getPageNumbers(
+	current: number,
+	total: number,
+): Array<number | "ellipsis"> {
+	if (total <= 7) {
+		return Array.from({ length: total }, (_, i) => i + 1);
+	}
+	const pages: Array<number | "ellipsis"> = [1];
+	if (current > 3) pages.push("ellipsis");
+	const start = Math.max(2, current - 1);
+	const end = Math.min(total - 1, current + 1);
+	for (let p = start; p <= end; p++) pages.push(p);
+	if (current < total - 2) pages.push("ellipsis");
+	pages.push(total);
+	return pages;
+}
+
+// Grows the store allocation bar from 0 to its real value once on mount —
+// Radix Progress's indicator is transform-based, so driving `value` through
+// a delayed state update lets its existing `transition-all` do the tween
+// without fighting the primitive. Later polling updates snap directly
+// instead of replaying the 0→value growth every 5s refresh.
+function AnimatedStoreBar({ pct }: { pct: number }) {
+	const shouldReduceMotion = useReducedMotion();
+	const [width, setWidth] = useState(shouldReduceMotion ? pct : 0);
+	const hasMounted = useRef(false);
+
+	useEffect(() => {
+		if (!hasMounted.current) {
+			hasMounted.current = true;
+			if (shouldReduceMotion) {
+				setWidth(pct);
+				return;
+			}
+			const raf = requestAnimationFrame(() => setWidth(pct));
+			return () => cancelAnimationFrame(raf);
+		}
+		setWidth(pct);
+	}, [pct, shouldReduceMotion]);
+
+	return (
+		<Progress
+			value={width}
+			className="h-2"
+			indicatorClassName="transition-transform duration-[400ms] ease-out"
+		/>
+	);
+}
+
 export default function ExecutiveInventoryDashboardPage() {
+	const shouldReduceMotion = useReducedMotion();
 	const [searchQuery, setSearchQuery] = useState("");
+
+	// "All Products" tab — full-catalog, server-paginated/sorted/searched view
+	// (separate from the Fast/Slow top-10 lists, which stay client-filtered).
+	// Declared above the loading/error early-returns below so hook order
+	// stays stable across renders regardless of fetch state (Rules of Hooks).
+	const [allPage, setAllPage] = useState(1);
+	const [allSortBy, setAllSortBy] = useState<VelocitySortBy>("sales");
+	const [allSortDir, setAllSortDir] = useState<VelocitySortDir>("desc");
+	const [allSearchInput, setAllSearchInput] = useState("");
+	const [allSearch, setAllSearch] = useState("");
+	const [allData, setAllData] = useState<{
+		items: VelocityItem[];
+		totalCount: number;
+		page: number;
+		pageSize: number;
+	} | null>(null);
+	const [allLoading, setAllLoading] = useState(false);
+
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			setAllPage(1);
+			setAllSearch(allSearchInput);
+		}, 300);
+		return () => clearTimeout(timer);
+	}, [allSearchInput]);
+
+	useEffect(() => {
+		let cancelled = false;
+		setAllLoading(true);
+		const params = new URLSearchParams({
+			page: String(allPage),
+			pageSize: String(ALL_PRODUCTS_PAGE_SIZE),
+			sortBy: allSortBy,
+			sortDir: allSortDir,
+			search: allSearch,
+		});
+		fetch(`/api/inventory/velocity?${params.toString()}`)
+			.then((res) => res.json())
+			.then((json) => {
+				if (cancelled) return;
+				if (json.success) setAllData(json.data);
+			})
+			.finally(() => {
+				if (!cancelled) setAllLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [allPage, allSortBy, allSortDir, allSearch]);
 
 	const fetcher = async (signal: AbortSignal) => {
 		const res = await fetch("/api/inventory/dashboard", { signal });
@@ -130,10 +272,15 @@ export default function ExecutiveInventoryDashboardPage() {
 				</div>
 				<div className="grid gap-4 md:grid-cols-4">
 					{[1, 2, 3, 4].map((i) => (
-						<Skeleton key={i} className="h-32 rounded-xl" />
+						<Skeleton key={i} className="h-[135px] rounded-2xl" />
 					))}
 				</div>
-				<Skeleton className="h-96 rounded-xl" />
+				<div className="grid gap-6 md:grid-cols-2">
+					<Skeleton className="h-72 rounded-xl" />
+					<Skeleton className="h-72 rounded-xl" />
+				</div>
+				<Skeleton className="h-[420px] rounded-xl" />
+				<Skeleton className="h-72 rounded-xl" />
 			</div>
 		);
 	}
@@ -179,6 +326,40 @@ export default function ExecutiveInventoryDashboardPage() {
 			item.sku.toLowerCase().includes(searchQuery.toLowerCase()),
 	);
 
+	// Each list scales its relative sales bar against its own max — fast and
+	// slow movers operate on completely different volume scales.
+	const maxFastSold = Math.max(1, ...filteredFast.map((i) => i.unitsSold30d));
+	const maxSlowSold = Math.max(1, ...filteredSlow.map((i) => i.unitsSold30d));
+
+	const handleAllSort = (col: VelocitySortBy) => {
+		setAllPage(1);
+		if (allSortBy === col) {
+			setAllSortDir((d) => (d === "asc" ? "desc" : "asc"));
+		} else {
+			setAllSortBy(col);
+			setAllSortDir("desc");
+		}
+	};
+
+	const allTotalPages = allData
+		? Math.max(1, Math.ceil(allData.totalCount / allData.pageSize))
+		: 1;
+	const maxAllSold = Math.max(
+		1,
+		...(allData?.items.map((i) => i.unitsSold30d) || []),
+	);
+
+	function SortIcon({ column }: { column: VelocitySortBy }) {
+		if (allSortBy !== column) {
+			return <ArrowUpDown className="size-3 text-muted-foreground/50" />;
+		}
+		return allSortDir === "asc" ? (
+			<ArrowUp className="size-3" />
+		) : (
+			<ArrowDown className="size-3" />
+		);
+	}
+
 	return (
 		<div className="flex flex-col gap-6 p-4 pt-4 md:p-8 transition-all">
 			{/* ── Executive Header ────────────────────────────────────────── */}
@@ -223,81 +404,72 @@ export default function ExecutiveInventoryDashboardPage() {
 
 			{/* ── Key Operational Metric Cards ────────────────────────────── */}
 			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-				<Card className="border-l-4 border-l-primary shadow-sm hover:shadow-md transition-shadow">
-					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<CardTitle className="text-sm font-medium text-muted-foreground">
-							Total Stock on Hand
-						</CardTitle>
-						<Boxes className="size-4 text-primary" />
-					</CardHeader>
-					<CardContent>
-						<div className="text-2xl font-bold">
-							{overview.totalSohQty.toLocaleString()} units
-						</div>
-						<p className="text-xs text-muted-foreground mt-1">
-							Across {overview.totalItemsCount.toLocaleString()} active SKUs
-						</p>
-					</CardContent>
-				</Card>
+				<motion.div
+					initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 8 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.25, delay: 0, ease: "easeOut" }}
+				>
+					<MetricCard
+						title="Total Stock on Hand"
+						value={`${overview.totalSohQty.toLocaleString()} units`}
+						icon={Boxes}
+						comparisonLabel={`Across ${overview.totalItemsCount.toLocaleString()} active SKUs`}
+					/>
+				</motion.div>
 
-				<Card className="border-l-4 border-l-emerald-500 shadow-sm hover:shadow-md transition-shadow">
-					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<CardTitle className="text-sm font-medium text-muted-foreground">
-							Inventory Valuation (MRP)
-						</CardTitle>
-						<IndianRupee className="size-4 text-emerald-500" />
-					</CardHeader>
-					<CardContent>
-						<div className="text-2xl font-bold">
-							{formatCurrency(overview.totalInventoryValueMrp)}
-						</div>
-						<p className="text-xs text-muted-foreground mt-1">
-							Cost Valuation: {formatCurrency(overview.totalInventoryValueCost)}
-						</p>
-					</CardContent>
-				</Card>
+				<motion.div
+					initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 8 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.25, delay: 0.06, ease: "easeOut" }}
+				>
+					<MetricCard
+						title="Inventory Valuation (MRP)"
+						value={formatCurrency(overview.totalInventoryValueMrp)}
+						icon={IndianRupee}
+						comparisonLabel={`Cost Valuation: ${formatCurrency(overview.totalInventoryValueCost)}`}
+					/>
+				</motion.div>
 
-				<Card className="border-l-4 border-l-amber-500 shadow-sm hover:shadow-md transition-shadow">
-					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<CardTitle className="text-sm font-medium text-muted-foreground">
-							Stock Health Score
-						</CardTitle>
-						<Activity className="size-4 text-amber-500" />
-					</CardHeader>
-					<CardContent>
-						<div className="flex items-center justify-between">
-							<span className="text-2xl font-bold">{healthRatio}%</span>
-							<Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-mono">
-								{overview.healthyStockCount} Healthy SKUs
-							</Badge>
-						</div>
-						<Progress value={healthRatio} className="h-1.5 mt-2" />
-						<p className="text-xs text-destructive font-medium mt-1.5">
-							{overview.lowStockCount} Low • {overview.outOfStockCount} Out •{" "}
-							{overview.deadStockCount} Dead Stock
-						</p>
-					</CardContent>
-				</Card>
+				<motion.div
+					initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 8 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.25, delay: 0.12, ease: "easeOut" }}
+				>
+					<Card className="shadow-sm hover:shadow-md transition-shadow">
+						<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+							<CardTitle className="text-sm font-medium text-muted-foreground">
+								Stock Health Score
+							</CardTitle>
+							<Activity className="size-4 text-amber-500" />
+						</CardHeader>
+						<CardContent>
+							<div className="flex items-center justify-between">
+								<span className="text-2xl font-bold">{healthRatio}%</span>
+								<Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-mono">
+									{overview.healthyStockCount} Healthy SKUs
+								</Badge>
+							</div>
+							<Progress value={healthRatio} className="h-1.5 mt-2" />
+							<p className="text-xs text-destructive font-medium mt-1.5">
+								{overview.lowStockCount} Low • {overview.outOfStockCount} Out •{" "}
+								{overview.deadStockCount} Dead Stock
+							</p>
+						</CardContent>
+					</Card>
+				</motion.div>
 
-				<Card className="border-l-4 border-l-sky-500 shadow-sm hover:shadow-md transition-shadow">
-					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<CardTitle className="text-sm font-medium text-muted-foreground">
-							Odoo SaaS Sync Status
-						</CardTitle>
-						<CheckCircle2 className="size-4 text-sky-500" />
-					</CardHeader>
-					<CardContent>
-						<div className="flex items-center gap-2">
-							<Badge className="bg-emerald-500 text-white font-mono">
-								🟢 {overview.syncHealth.status.toUpperCase()}
-							</Badge>
-						</div>
-						<p className="text-xs text-muted-foreground mt-2">
-							Telemetry Processed:{" "}
-							{overview.syncHealth.recordsProcessed.toLocaleString()} recs
-						</p>
-					</CardContent>
-				</Card>
+				<motion.div
+					initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 8 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.25, delay: 0.18, ease: "easeOut" }}
+				>
+					<MetricCard
+						title="Odoo SaaS Sync Status"
+						value={overview.syncHealth.status.toUpperCase()}
+						icon={CheckCircle2}
+						comparisonLabel={`Telemetry Processed: ${overview.syncHealth.recordsProcessed.toLocaleString()} recs`}
+					/>
+				</motion.div>
 			</div>
 
 			{/* ── Store-Wise Inventory & Stock Aging ──────────────────────── */}
@@ -315,6 +487,23 @@ export default function ExecutiveInventoryDashboardPage() {
 					</CardHeader>
 					<CardContent className="space-y-4">
 						{storeBreakdown.map((store) => {
+							if (!store.locationMapped) {
+								return (
+									<Empty
+										key={store.storeId}
+										className="border-b pb-3 last:border-0 last:pb-0 p-2"
+									>
+										<EmptyTitle>
+											{store.storeName} ({store.storeCode})
+										</EmptyTitle>
+										<EmptyDescription>
+											No location mapping yet — inventory sync will populate
+											this once the store's stock location is resolved.
+										</EmptyDescription>
+									</Empty>
+								);
+							}
+
 							const pct = Math.round(
 								(store.totalQuantity / Math.max(1, overview.totalSohQty)) * 100,
 							);
@@ -331,7 +520,7 @@ export default function ExecutiveInventoryDashboardPage() {
 											{store.totalQuantity.toLocaleString()} units ({pct}%)
 										</span>
 									</div>
-									<Progress value={pct} className="h-2" />
+									<AnimatedStoreBar pct={pct} />
 									<p className="text-xs text-muted-foreground">
 										Valuation: {formatCurrency(store.valuationMrp)} •{" "}
 										{store.itemCount} SKUs
@@ -354,10 +543,17 @@ export default function ExecutiveInventoryDashboardPage() {
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
-						{stockAging.map((age) => (
-							<div
+						{stockAging.map((age, i) => (
+							<motion.div
 								key={age.ageRange}
-								className="flex items-center justify-between border-b pb-2.5 last:border-0 last:pb-0"
+								initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 8 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{
+									duration: 0.25,
+									delay: i * 0.06,
+									ease: "easeOut",
+								}}
+								className="flex items-center justify-between border-b pb-2.5 last:border-0 last:pb-0 rounded-md px-1.5 -mx-1.5 hover:bg-muted/40 transition-colors"
 							>
 								<div>
 									<p className="font-semibold text-sm">{age.ageRange}</p>
@@ -382,7 +578,7 @@ export default function ExecutiveInventoryDashboardPage() {
 											: "Active Stock"}
 									</Badge>
 								</div>
-							</div>
+							</motion.div>
 						))}
 					</CardContent>
 				</Card>
@@ -412,99 +608,352 @@ export default function ExecutiveInventoryDashboardPage() {
 				</CardHeader>
 				<CardContent>
 					<Tabs defaultValue="fast" className="w-full">
-						<TabsList className="grid w-full grid-cols-2 max-w-xs mb-4">
+						<TabsList className="grid w-full grid-cols-3 max-w-md mb-4">
 							<TabsTrigger value="fast">Fast Moving (Top 10)</TabsTrigger>
 							<TabsTrigger value="slow">Slow Moving (Top 10)</TabsTrigger>
+							<TabsTrigger value="all">All Products</TabsTrigger>
 						</TabsList>
 
 						<TabsContent value="fast" className="space-y-3">
 							<div className="rounded-md border">
-								<div className="grid grid-cols-12 bg-muted/40 p-3 text-xs font-semibold text-muted-foreground border-b">
-									<div className="col-span-5">PRODUCT / SKU</div>
-									<div className="col-span-3 text-right">30-DAY SALES</div>
-									<div className="col-span-2 text-right">VELOCITY</div>
-									<div className="col-span-2 text-right">SOH QTY</div>
-								</div>
-								{filteredFast.map((item) => (
-									<div
-										key={item.productId}
-										className="grid grid-cols-12 p-3 text-sm border-b last:border-0 items-center hover:bg-muted/30 transition-colors"
-									>
-										<div className="col-span-5">
-											<div className="flex items-center gap-2">
-												<Badge className="bg-emerald-600 text-white text-[10px]">
-													A-ITEM
-												</Badge>
-												<div className="truncate">
-													<p className="font-medium truncate">{item.name}</p>
-													<p className="text-xs text-muted-foreground font-mono">
-														{item.sku} • {item.category}
-													</p>
-												</div>
-											</div>
-										</div>
-										<div className="col-span-3 text-right font-semibold">
-											{item.unitsSold30d} units
-										</div>
-										<div className="col-span-2 text-right">
-											<Badge
-												variant="outline"
-												className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs font-mono"
-											>
-												{item.velocityDaily}/day
-											</Badge>
-										</div>
-										<div className="col-span-2 text-right font-mono font-bold">
-											{item.qtyOnHand}
-										</div>
-									</div>
-								))}
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead className="w-10">#</TableHead>
+											<TableHead>PRODUCT / SKU</TableHead>
+											<TableHead className="text-right">30-DAY SALES</TableHead>
+											<TableHead className="text-right">VELOCITY</TableHead>
+											<TableHead className="text-right">SOH QTY</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{filteredFast.map((item, i) => {
+											const barPct = Math.round(
+												(item.unitsSold30d / maxFastSold) * 100,
+											);
+											return (
+												<TableRow key={item.productId}>
+													<TableCell className="font-mono text-xs text-muted-foreground">
+														{String(i + 1).padStart(2, "0")}
+													</TableCell>
+													<TableCell className="whitespace-normal">
+														<div className="flex items-center gap-2">
+															<Badge className="bg-emerald-600 text-white text-[10px]">
+																A-ITEM
+															</Badge>
+															<div className="truncate">
+																<p className="font-medium truncate">
+																	{item.name}
+																</p>
+																<p className="text-xs text-muted-foreground font-mono">
+																	{item.sku} • {item.category}
+																</p>
+															</div>
+														</div>
+													</TableCell>
+													<TableCell className="text-right">
+														<div className="flex flex-col items-end gap-1">
+															<span className="font-semibold">
+																{item.unitsSold30d} units
+															</span>
+															<div className="h-1 w-20 rounded-full bg-muted overflow-hidden">
+																<div
+																	className="h-full rounded-full bg-emerald-500"
+																	style={{ width: `${barPct}%` }}
+																/>
+															</div>
+														</div>
+													</TableCell>
+													<TableCell className="text-right">
+														<Badge
+															variant="outline"
+															className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs font-mono"
+														>
+															{item.velocityDaily}/day
+														</Badge>
+													</TableCell>
+													<TableCell className="text-right font-mono font-bold">
+														<span className="inline-flex items-center gap-1.5 justify-end">
+															{item.qtyOnHand}
+															{item.qtyOnHand === 0 && (
+																<span
+																	className="inline-block size-1.5 rounded-full bg-destructive"
+																	title="Top seller out of stock"
+																/>
+															)}
+														</span>
+													</TableCell>
+												</TableRow>
+											);
+										})}
+									</TableBody>
+								</Table>
 							</div>
 						</TabsContent>
 
 						<TabsContent value="slow" className="space-y-3">
 							<div className="rounded-md border">
-								<div className="grid grid-cols-12 bg-muted/40 p-3 text-xs font-semibold text-muted-foreground border-b">
-									<div className="col-span-5">PRODUCT / SKU</div>
-									<div className="col-span-3 text-right">30-DAY SALES</div>
-									<div className="col-span-2 text-right">VELOCITY</div>
-									<div className="col-span-2 text-right">SOH QTY</div>
-								</div>
-								{filteredSlow.map((item) => (
-									<div
-										key={item.productId}
-										className="grid grid-cols-12 p-3 text-sm border-b last:border-0 items-center hover:bg-muted/30 transition-colors"
-									>
-										<div className="col-span-5">
-											<div className="flex items-center gap-2">
-												<Badge className="bg-amber-600 text-white text-[10px]">
-													C-ITEM
-												</Badge>
-												<div className="truncate">
-													<p className="font-medium truncate">{item.name}</p>
-													<p className="text-xs text-muted-foreground font-mono">
-														{item.sku} • {item.category}
-													</p>
-												</div>
-											</div>
-										</div>
-										<div className="col-span-3 text-right font-semibold text-muted-foreground">
-											{item.unitsSold30d} units
-										</div>
-										<div className="col-span-2 text-right">
-											<Badge
-												variant="outline"
-												className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs font-mono"
-											>
-												{item.velocityDaily}/day
-											</Badge>
-										</div>
-										<div className="col-span-2 text-right font-mono font-bold text-amber-600">
-											{item.qtyOnHand}
-										</div>
-									</div>
-								))}
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead className="w-10">#</TableHead>
+											<TableHead>PRODUCT / SKU</TableHead>
+											<TableHead className="text-right">30-DAY SALES</TableHead>
+											<TableHead className="text-right">VELOCITY</TableHead>
+											<TableHead className="text-right">SOH QTY</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{filteredSlow.map((item, i) => {
+											const barPct = Math.round(
+												(item.unitsSold30d / maxSlowSold) * 100,
+											);
+											return (
+												<TableRow key={item.productId}>
+													<TableCell className="font-mono text-xs text-muted-foreground">
+														{String(i + 1).padStart(2, "0")}
+													</TableCell>
+													<TableCell className="whitespace-normal">
+														<div className="flex items-center gap-2">
+															<Badge className="bg-amber-600 text-white text-[10px]">
+																C-ITEM
+															</Badge>
+															<div className="truncate">
+																<p className="font-medium truncate">
+																	{item.name}
+																</p>
+																<p className="text-xs text-muted-foreground font-mono">
+																	{item.sku} • {item.category}
+																</p>
+															</div>
+														</div>
+													</TableCell>
+													<TableCell className="text-right">
+														<div className="flex flex-col items-end gap-1">
+															<span className="font-semibold text-muted-foreground">
+																{item.unitsSold30d} units
+															</span>
+															<div className="h-1 w-20 rounded-full bg-muted overflow-hidden">
+																<div
+																	className="h-full rounded-full bg-amber-500"
+																	style={{ width: `${barPct}%` }}
+																/>
+															</div>
+														</div>
+													</TableCell>
+													<TableCell className="text-right">
+														<Badge
+															variant="outline"
+															className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs font-mono"
+														>
+															{item.velocityDaily}/day
+														</Badge>
+													</TableCell>
+													<TableCell className="text-right font-mono font-bold text-amber-600">
+														{item.qtyOnHand}
+													</TableCell>
+												</TableRow>
+											);
+										})}
+									</TableBody>
+								</Table>
 							</div>
+						</TabsContent>
+
+						<TabsContent value="all" className="space-y-3">
+							<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-1">
+								<p className="text-xs text-muted-foreground">
+									{allData
+										? `Showing ${allData.totalCount === 0 ? 0 : (allPage - 1) * allData.pageSize + 1}-${Math.min(allPage * allData.pageSize, allData.totalCount)} of ${allData.totalCount.toLocaleString()}`
+										: "Loading…"}
+								</p>
+								<div className="relative w-full sm:w-64">
+									<Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+									<Input
+										placeholder="Search all SKUs..."
+										value={allSearchInput}
+										onChange={(e) => setAllSearchInput(e.target.value)}
+										className="pl-9 h-9 text-xs"
+									/>
+								</div>
+							</div>
+
+							<div className="rounded-md border">
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead className="w-10">#</TableHead>
+											<TableHead>
+												<button
+													type="button"
+													onClick={() => handleAllSort("name")}
+													className="flex items-center gap-1 hover:text-foreground"
+												>
+													PRODUCT / SKU <SortIcon column="name" />
+												</button>
+											</TableHead>
+											<TableHead className="text-right">
+												<button
+													type="button"
+													onClick={() => handleAllSort("sales")}
+													className="flex items-center gap-1 ml-auto hover:text-foreground"
+												>
+													30-DAY SALES <SortIcon column="sales" />
+												</button>
+											</TableHead>
+											<TableHead className="text-right">
+												<button
+													type="button"
+													onClick={() => handleAllSort("velocity")}
+													className="flex items-center gap-1 ml-auto hover:text-foreground"
+												>
+													VELOCITY <SortIcon column="velocity" />
+												</button>
+											</TableHead>
+											<TableHead className="text-right">
+												<button
+													type="button"
+													onClick={() => handleAllSort("soh")}
+													className="flex items-center gap-1 ml-auto hover:text-foreground"
+												>
+													SOH QTY <SortIcon column="soh" />
+												</button>
+											</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{allLoading && !allData ? (
+											<TableRow>
+												<TableCell colSpan={5} className="text-center py-8">
+													<Skeleton className="h-6 w-full" />
+												</TableCell>
+											</TableRow>
+										) : allData && allData.items.length === 0 ? (
+											<TableRow>
+												<TableCell colSpan={5} className="py-8">
+													<Empty>
+														<EmptyTitle>No products found</EmptyTitle>
+														<EmptyDescription>
+															No SKUs match "{allSearch}".
+														</EmptyDescription>
+													</Empty>
+												</TableCell>
+											</TableRow>
+										) : (
+											allData?.items.map((item, i) => {
+												const barPct = Math.round(
+													(item.unitsSold30d / maxAllSold) * 100,
+												);
+												const rank =
+													(allPage - 1) * ALL_PRODUCTS_PAGE_SIZE + i + 1;
+												return (
+													<TableRow key={item.productId}>
+														<TableCell className="font-mono text-xs text-muted-foreground">
+															{String(rank).padStart(2, "0")}
+														</TableCell>
+														<TableCell className="whitespace-normal">
+															<div className="truncate">
+																<p className="font-medium truncate">
+																	{item.name}
+																</p>
+																<p className="text-xs text-muted-foreground font-mono">
+																	{item.sku} • {item.category}
+																</p>
+															</div>
+														</TableCell>
+														<TableCell className="text-right">
+															<div className="flex flex-col items-end gap-1">
+																<span className="font-semibold">
+																	{item.unitsSold30d} units
+																</span>
+																<div className="h-1 w-20 rounded-full bg-muted overflow-hidden">
+																	<div
+																		className="h-full rounded-full bg-primary"
+																		style={{ width: `${barPct}%` }}
+																	/>
+																</div>
+															</div>
+														</TableCell>
+														<TableCell className="text-right">
+															<Badge
+																variant="outline"
+																className="text-xs font-mono"
+															>
+																{item.velocityDaily}/day
+															</Badge>
+														</TableCell>
+														<TableCell className="text-right font-mono font-bold">
+															<span className="inline-flex items-center gap-1.5 justify-end">
+																{item.qtyOnHand}
+																{item.qtyOnHand === 0 && (
+																	<span
+																		className="inline-block size-1.5 rounded-full bg-destructive"
+																		title="Out of stock"
+																	/>
+																)}
+															</span>
+														</TableCell>
+													</TableRow>
+												);
+											})
+										)}
+									</TableBody>
+								</Table>
+							</div>
+
+							{allData && allTotalPages > 1 && (
+								<Pagination>
+									<PaginationContent>
+										<PaginationItem>
+											<PaginationPrevious
+												href="#"
+												onClick={(e) => {
+													e.preventDefault();
+													setAllPage((p) => Math.max(1, p - 1));
+												}}
+												className={
+													allPage <= 1 ? "pointer-events-none opacity-50" : ""
+												}
+											/>
+										</PaginationItem>
+										{getPageNumbers(allPage, allTotalPages).map((p, idx) =>
+											p === "ellipsis" ? (
+												// biome-ignore lint/suspicious/noArrayIndexKey: ellipsis markers carry no identity; there are at most two per render and their position is stable for a given allPage/allTotalPages pair.
+												<PaginationItem key={`ellipsis-${idx}`}>
+													<PaginationEllipsis />
+												</PaginationItem>
+											) : (
+												<PaginationItem key={p}>
+													<PaginationLink
+														href="#"
+														isActive={p === allPage}
+														onClick={(e) => {
+															e.preventDefault();
+															setAllPage(p);
+														}}
+													>
+														{p}
+													</PaginationLink>
+												</PaginationItem>
+											),
+										)}
+										<PaginationItem>
+											<PaginationNext
+												href="#"
+												onClick={(e) => {
+													e.preventDefault();
+													setAllPage((p) => Math.min(allTotalPages, p + 1));
+												}}
+												className={
+													allPage >= allTotalPages
+														? "pointer-events-none opacity-50"
+														: ""
+												}
+											/>
+										</PaginationItem>
+									</PaginationContent>
+								</Pagination>
+							)}
 						</TabsContent>
 					</Tabs>
 				</CardContent>
@@ -531,53 +980,58 @@ export default function ExecutiveInventoryDashboardPage() {
 				</CardHeader>
 				<CardContent>
 					<div className="rounded-md border">
-						<div className="grid grid-cols-12 bg-muted/40 p-3 text-xs font-semibold text-muted-foreground border-b">
-							<div className="col-span-4">PRODUCT / SKU</div>
-							<div className="col-span-2 text-center">SOH QTY</div>
-							<div className="col-span-2 text-center">DAILY RUN RATE</div>
-							<div className="col-span-2 text-center">DAYS REMAINING</div>
-							<div className="col-span-2 text-right">SUGGESTED REORDER</div>
-						</div>
-						{reorderRecommendations.map((rec) => (
-							<div
-								key={rec.productId}
-								className="grid grid-cols-12 p-3 text-sm border-b last:border-0 items-center hover:bg-muted/30 transition-colors"
-							>
-								<div className="col-span-4">
-									<div className="flex items-center gap-2">
-										<Badge
-											className={
-												rec.urgency === "critical"
-													? "bg-destructive text-white text-[10px]"
-													: rec.urgency === "high"
-														? "bg-amber-500 text-white text-[10px]"
-														: "bg-blue-500 text-white text-[10px]"
-											}
-										>
-											{rec.urgency.toUpperCase()}
-										</Badge>
-										<div className="truncate">
-											<p className="font-medium truncate">{rec.name}</p>
-											<p className="text-xs text-muted-foreground font-mono">
-												{rec.sku}
-											</p>
-										</div>
-									</div>
-								</div>
-								<div className="col-span-2 text-center font-mono font-bold text-destructive">
-									{rec.qtyOnHand}
-								</div>
-								<div className="col-span-2 text-center text-xs font-mono">
-									{rec.dailyRunRate} / day
-								</div>
-								<div className="col-span-2 text-center font-bold text-xs text-amber-600 font-mono">
-									{rec.daysOfSupplyRemaining} days left
-								</div>
-								<div className="col-span-2 text-right font-mono font-bold text-violet-700 dark:text-violet-300">
-									+{rec.suggestedReorderQty} units
-								</div>
-							</div>
-						))}
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>PRODUCT / SKU</TableHead>
+									<TableHead className="text-center">SOH QTY</TableHead>
+									<TableHead className="text-center">DAILY RUN RATE</TableHead>
+									<TableHead className="text-center">DAYS REMAINING</TableHead>
+									<TableHead className="text-right">
+										SUGGESTED REORDER
+									</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{reorderRecommendations.map((rec) => (
+									<TableRow key={rec.productId}>
+										<TableCell className="whitespace-normal">
+											<div className="flex items-center gap-2">
+												<Badge
+													className={
+														rec.urgency === "critical"
+															? "bg-destructive text-white text-[10px]"
+															: rec.urgency === "high"
+																? "bg-amber-500 text-white text-[10px]"
+																: "bg-blue-500 text-white text-[10px]"
+													}
+												>
+													{rec.urgency.toUpperCase()}
+												</Badge>
+												<div className="truncate">
+													<p className="font-medium truncate">{rec.name}</p>
+													<p className="text-xs text-muted-foreground font-mono">
+														{rec.sku}
+													</p>
+												</div>
+											</div>
+										</TableCell>
+										<TableCell className="text-center font-mono font-bold text-destructive">
+											{rec.qtyOnHand}
+										</TableCell>
+										<TableCell className="text-center text-xs font-mono">
+											{rec.dailyRunRate} / day
+										</TableCell>
+										<TableCell className="text-center font-bold text-xs text-amber-600 font-mono">
+											{rec.daysOfSupplyRemaining} days left
+										</TableCell>
+										<TableCell className="text-right font-mono font-bold text-violet-700 dark:text-violet-300">
+											+{rec.suggestedReorderQty} units
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
 					</div>
 				</CardContent>
 			</Card>

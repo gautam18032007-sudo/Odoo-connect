@@ -27,6 +27,7 @@ export async function syncProducts(
 		"free_qty",
 		"active",
 		"categ_id",
+		"is_storable",
 		"write_date",
 	];
 
@@ -75,6 +76,7 @@ export async function syncProducts(
 			category: Array.isArray(rec.categ_id)
 				? String(rec.categ_id[1])
 				: undefined,
+			isStorable: Boolean(rec.is_storable),
 		}));
 
 		await upsertProducts(productsToUpsert);

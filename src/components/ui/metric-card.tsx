@@ -27,28 +27,30 @@ export function MetricCard({
 	return (
 		<div
 			className={cn(
-				"relative flex flex-col justify-between h-full min-h-[135px] p-6 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 backdrop-blur-xl transition-all duration-300 hover:border-zinc-700/80 hover:shadow-lg hover:-translate-y-0.5",
+				"relative flex flex-col justify-between h-full min-h-[135px] p-6 rounded-2xl bg-card text-card-foreground ring-1 ring-foreground/10 backdrop-blur-xl transition-all duration-300 hover:ring-foreground/20 hover:shadow-lg hover:-translate-y-0.5",
 				className,
 			)}
 			{...props}
 		>
 			<div className="flex items-center justify-between gap-2">
-				<span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+				<span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
 					{title}
 				</span>
 				{Icon && (
-					<div className="p-2 rounded-xl bg-zinc-800/50 border border-zinc-700/40 text-zinc-300">
+					<div className="p-2 rounded-xl bg-muted ring-1 ring-foreground/10 text-foreground">
 						<Icon className="size-4 shrink-0" />
 					</div>
 				)}
 			</div>
 
 			<div className="my-2 flex items-baseline gap-1.5">
-				<span className="text-3xl font-bold tracking-tight text-zinc-100 font-mono">
+				<span className="text-3xl font-bold tracking-tight text-card-foreground font-mono">
 					{value}
 				</span>
 				{suffix && (
-					<span className="text-xs font-medium text-zinc-400">{suffix}</span>
+					<span className="text-xs font-medium text-muted-foreground">
+						{suffix}
+					</span>
 				)}
 			</div>
 
@@ -58,11 +60,11 @@ export function MetricCard({
 						className={cn(
 							"inline-flex items-center font-bold gap-0.5 rounded-md px-2 py-0.5 text-xs",
 							isPositive &&
-								"bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+								"bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
 							isNegative &&
-								"bg-rose-500/10 text-rose-400 border border-rose-500/20",
+								"bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20",
 							growth === 0 &&
-								"bg-zinc-800/50 text-zinc-400 border border-zinc-700/30",
+								"bg-muted text-muted-foreground border border-foreground/10",
 						)}
 					>
 						{isPositive && <ArrowUpRight className="size-3.5 shrink-0" />}
@@ -70,14 +72,14 @@ export function MetricCard({
 						{growth >= 0 ? `+${Math.abs(growth)}%` : `-${Math.abs(growth)}%`}
 					</span>
 					{comparisonLabel && (
-						<span className="text-xs text-zinc-400 truncate">
+						<span className="text-xs text-muted-foreground truncate">
 							{comparisonLabel}
 						</span>
 					)}
 				</div>
 			) : (
 				comparisonLabel && (
-					<span className="text-xs text-zinc-400 truncate block mt-1">
+					<span className="text-xs text-muted-foreground truncate block mt-1">
 						{comparisonLabel}
 					</span>
 				)

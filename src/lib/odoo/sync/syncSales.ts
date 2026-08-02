@@ -40,6 +40,7 @@ async function fetchAndUpsertMissingProducts(
 					"free_qty",
 					"active",
 					"categ_id",
+					"is_storable",
 				],
 			},
 		);
@@ -57,6 +58,7 @@ async function fetchAndUpsertMissingProducts(
 				category: Array.isArray(rec.categ_id)
 					? String(rec.categ_id[1])
 					: undefined,
+				isStorable: Boolean(rec.is_storable),
 			}));
 			await upsertProducts(productsToUpsert);
 		}
@@ -88,11 +90,48 @@ export async function syncSales(
 			"search_read",
 			[],
 			{
-				fields: ["id", "name"],
+				fields: ["id", "name", "picking_type_id"],
 			},
 		);
 
 		if (configs && configs.length > 0) {
+			// Resolve each store's stock.location ID via its picking type's
+			// default source location — pos.config IDs and stock.location IDs
+			// are different Odoo ID spaces, so fact_inventory (keyed on
+			// stock.location) can't be joined to dim_stores.id directly.
+			const pickingTypeIds = [
+				...new Set(
+					configs
+						.map((c) =>
+							Array.isArray(c.picking_type_id)
+								? Number(c.picking_type_id[0])
+								: null,
+						)
+						.filter((id): id is number => id !== null),
+				),
+			];
+
+			const pickingTypeToLocation = new Map<number, number>();
+			if (pickingTypeIds.length > 0) {
+				const pickingTypes = await client.callKw<any[]>(
+					"stock.picking.type",
+					"search_read",
+					[],
+					{
+						domain: [["id", "in", pickingTypeIds]],
+						fields: ["id", "default_location_src_id"],
+					},
+				);
+				for (const pt of pickingTypes) {
+					if (Array.isArray(pt.default_location_src_id)) {
+						pickingTypeToLocation.set(
+							Number(pt.id),
+							Number(pt.default_location_src_id[0]),
+						);
+					}
+				}
+			}
+
 			const storesToUpsert: OdooStore[] = configs.map((c) => {
 				let code = "STORE";
 				const nameLower = c.name.toLowerCase();
@@ -101,10 +140,18 @@ export async function syncSales(
 				else if (nameLower.includes("swn") || nameLower.includes("smartworks"))
 					code = "SWN";
 
+				const pickingTypeId = Array.isArray(c.picking_type_id)
+					? Number(c.picking_type_id[0])
+					: null;
+				const locationId = pickingTypeId
+					? pickingTypeToLocation.get(pickingTypeId)
+					: undefined;
+
 				return {
 					id: Number(c.id),
 					name: String(c.name),
 					code,
+					locationId,
 				};
 			});
 			await upsertStores(storesToUpsert);
