@@ -7,7 +7,7 @@
   "crons": [
     {
       "path": "/api/cron/odoo-sync",
-      "schedule": "* * * * *"
+      "schedule": "*/2 * * * *"
     }
   ]
 }
