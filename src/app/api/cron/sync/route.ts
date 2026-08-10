@@ -1,75 +1,33 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { runSyncPipeline } from "@/lib/odoo/sync/orchestrator";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/cron/sync
- * Legacy/Alternative cron route for background Odoo synchronization.
+ * GET /api/cron/sync  — DEPRECATED
+ *
+ * This route is no longer the canonical Vercel Cron entry point.
+ * The single registered backup cron is: /api/cron/odoo-sync
+ *
+ * This route is retained only to return a clear 410 Gone so that any
+ * leftover external call (monitoring agent, manual trigger) immediately
+ * signals the correct endpoint — rather than silently succeeding or 404-ing.
+ *
+ * @deprecated Use /api/cron/odoo-sync instead.
  */
-export async function GET(req: NextRequest) {
-	const startTime = Date.now();
-	const authHeader = req.headers.get("authorization");
-	const searchParams = req.nextUrl.searchParams;
-	const bearerToken = authHeader?.startsWith("Bearer ")
-		? authHeader.substring(7)
-		: null;
-	const querySecret = searchParams.get("secret");
-
-	const providedSecret = bearerToken || querySecret;
-	const expectedSecret = process.env.CRON_SECRET;
-
-	if (expectedSecret && providedSecret !== expectedSecret) {
-		console.warn("[ODOO_CRON] Rejected unauthorized cron trigger attempt");
-		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-	}
-
-	// The Oracle-hosted always-on worker (src/lib/odoo/sync/worker.ts) is now
-	// the primary sync engine. This route is a manually-controlled backup
-	// path only — disabled by default so it can never race the worker's
-	// writes, even if Vercel Cron resumes firing. See orchestrator.ts's
-	// @deprecated notice on runSyncPipeline() for the full rationale.
-	if (process.env.LEGACY_CRON_SYNC_ENABLED !== "true") {
-		console.log(
-			"[ODOO_CRON] Skipped — legacy cron sync is disabled (Oracle Worker is primary). Set LEGACY_CRON_SYNC_ENABLED=true to re-enable this backup path.",
-		);
-		return NextResponse.json({
-			success: true,
-			skipped: true,
-			reason:
-				"Legacy cron sync is disabled — Oracle Worker is the primary sync engine. Set LEGACY_CRON_SYNC_ENABLED=true to re-enable this backup path.",
-			timestamp: new Date().toISOString(),
-		});
-	}
-
-	console.log("[ODOO_CRON] Triggering scheduled Odoo sync pipeline...");
-
-	try {
-		await runSyncPipeline();
-		const durationMs = Date.now() - startTime;
-		const durationSec = (durationMs / 1000).toFixed(1);
-
-		return NextResponse.json({
-			success: true,
-			timestamp: new Date().toISOString(),
-			duration: `${durationSec}s`,
-			durationMs,
-			message: "Sync pipeline executed successfully.",
-		});
-	} catch (error: any) {
-		const durationMs = Date.now() - startTime;
-		console.error("[ODOO_CRON] Sync failed:", error.message);
-		return NextResponse.json(
-			{
-				success: false,
-				error: error.message || "Cron sync pipeline error",
-				timestamp: new Date().toISOString(),
-				durationMs,
-			},
-			{ status: 500 },
-		);
-	}
+export async function GET(_req: NextRequest) {
+	console.warn(
+		"[ODOO_CRON] /api/cron/sync is deprecated. Use /api/cron/odoo-sync instead.",
+	);
+	return NextResponse.json(
+		{
+			error: "Gone",
+			message:
+				"This cron endpoint is deprecated. The canonical backup cron is /api/cron/odoo-sync.",
+			canonical: "/api/cron/odoo-sync",
+		},
+		{ status: 410 },
+	);
 }
 
 export async function POST(req: NextRequest) {

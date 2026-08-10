@@ -1,0 +1,32 @@
+# systemd timer — fires worker-health-check.service every 2 minutes.
+# This is the "Oracle cron" layer that drives worker auto-recovery.
+#
+# Why 2 minutes?
+#   - Oracle Worker writes a heartbeat every poll cycle (2-15 s).
+#   - Heartbeat freshness threshold is 120 s (2 minutes).
+#   - If the worker has been silent for 2 minutes, this timer fires,
+#     detects the stale heartbeat, and restarts it.
+#   - Vercel Cron also fires every minute as an external backup,
+#     but it only does a DB sync — this timer handles the worker restart.
+#
+# Install (see worker-health-check.service for full instructions):
+#   sudo systemctl enable --now worker-health-check.timer
+
+[Unit]
+Description=ZenZebra Sync Worker Health Check Timer
+Requires=worker-health-check.service
+
+[Timer]
+# Fire 60 seconds after boot to give the worker time to start.
+OnBootSec=60s
+# Then fire every 2 minutes thereafter.
+OnUnitActiveSec=2min
+# Randomize start within a 30-second window to avoid thundering-herd
+# if multiple hosts run the timer at the same scheduled time.
+RandomizedDelaySec=30s
+# Persist the timer state across reboots so no cycle is skipped.
+Persistent=true
+Unit=worker-health-check.service
+
+[Install]
+WantedBy=timers.target

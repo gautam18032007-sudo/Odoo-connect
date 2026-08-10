@@ -1,85 +1,368 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { runSyncPipeline } from "@/lib/odoo/sync/orchestrator";
+import { invalidateDashboardCache } from "@/lib/cache/revalidate";
+import { OdooClient } from "@/lib/odoo/client";
+import { releaseCronLock, tryAcquireCronLock } from "@/lib/odoo/sync/cron-lock";
+import { syncCustomers } from "@/lib/odoo/sync/syncCustomers";
+import { syncInventory } from "@/lib/odoo/sync/syncInventory";
+import { syncProducts } from "@/lib/odoo/sync/syncProducts";
+import { syncSales } from "@/lib/odoo/sync/syncSales";
+import {
+	getLastSyncTime,
+	getWorkerHeartbeat,
+	logSyncTelemetry,
+} from "@/lib/repositories/odoo.repository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * GET /api/cron/odoo-sync
- * Scheduled 1-minute Cron backup sync for Odoo 19 SaaS.
- * Fetches incremental record changes (write_date >= last_sync_time) as a fail-safe backup for webhooks.
- */
-export async function GET(req: NextRequest) {
-	const startTime = Date.now();
+// Worker heartbeat older than this is considered stale — cron may proceed.
+// Must match HEARTBEAT_FRESHNESS_SECONDS in /api/sync/status and /api/health.
+const WORKER_FRESHNESS_SECONDS = 120;
+
+// Vercel Cron sends `Authorization: Bearer <CRON_SECRET>` automatically when
+// CRON_SECRET is set in the Vercel project environment.
+// Ref: https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs
+function isAuthorized(req: NextRequest): boolean {
+	const expectedSecret = process.env.CRON_SECRET;
+	if (!expectedSecret) {
+		// No secret configured: allow (local dev / first-time setup).
+		// Log clearly so the omission is visible in function logs.
+		console.warn(
+			"[ODOO_CRON] CRON_SECRET is not set — accepting unauthenticated request. Set CRON_SECRET in Vercel environment variables.",
+		);
+		return true;
+	}
 	const authHeader =
 		req.headers.get("authorization") || req.headers.get("Authorization");
-	const searchParams = req.nextUrl.searchParams;
 	const bearerToken = authHeader?.startsWith("Bearer ")
 		? authHeader.substring(7)
 		: null;
-	const querySecret = searchParams.get("secret");
+	const querySecret = req.nextUrl.searchParams.get("secret");
+	const provided = bearerToken ?? querySecret ?? "";
+	return provided === expectedSecret;
+}
 
-	const providedSecret = bearerToken || querySecret;
-	const expectedSecret = process.env.CRON_SECRET;
+/**
+ * GET /api/cron/odoo-sync  (canonical Vercel Cron backup path)
+ *
+ * Architecture:
+ *   Primary sync  → Oracle always-on worker (`src/lib/odoo/sync/worker.ts`)
+ *   Backup sync   → this route (fires only when the worker heartbeat is stale)
+ *
+ * Coordination guarantee (three-layer):
+ *   1. Heartbeat check  — skips if the Oracle worker wrote a heartbeat < 120 s ago.
+ *   2. Advisory lock    — pg_try_advisory_lock prevents two concurrent Vercel
+ *                         invocations from racing each other.
+ *   3. Idempotent ops   — all DB writes use ON CONFLICT DO UPDATE, so an
+ *                         accidental overlap is safe in the worst case.
+ *
+ * This route does NOT call runSyncPipeline() (the legacy uncoordinated full sync).
+ * Instead it reuses the same individual entity sync functions the Oracle worker uses,
+ * so business logic, SQL semantics, and KPI calculations are identical.
+ */
+export async function GET(req: NextRequest) {
+	const traceId = `cron_${Date.now()}`;
+	const startTime = Date.now();
 
-	// Authenticate if CRON_SECRET is configured
-	if (expectedSecret && providedSecret !== expectedSecret) {
+	// ── 1. Authentication ──────────────────────────────────────────────────────
+	if (!isAuthorized(req)) {
 		console.warn("[ODOO_CRON] Rejected unauthorized cron trigger attempt");
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
-	// The Oracle-hosted always-on worker (src/lib/odoo/sync/worker.ts) is now
-	// the primary sync engine. This route is a manually-controlled backup
-	// path only — disabled by default so it can never race the worker's
-	// writes, even if Vercel Cron resumes firing. See orchestrator.ts's
-	// @deprecated notice on runSyncPipeline() for the full rationale.
-	if (process.env.LEGACY_CRON_SYNC_ENABLED !== "true") {
+	// ── 2. Feature gate (opt-in for safety) ───────────────────────────────────
+	// Default OFF: the Oracle Worker is primary. Vercel Cron will only act as a
+	// live backup when VERCEL_CRON_BACKUP_ENABLED=true is explicitly set.
+	if (process.env.VERCEL_CRON_BACKUP_ENABLED !== "true") {
 		console.log(
-			"[ODOO_CRON] Skipped — legacy cron sync is disabled (Oracle Worker is primary). Set LEGACY_CRON_SYNC_ENABLED=true to re-enable this backup path.",
+			"[ODOO_CRON] Backup cron is disabled (VERCEL_CRON_BACKUP_ENABLED != true). " +
+				"Set VERCEL_CRON_BACKUP_ENABLED=true in Vercel env to activate.",
+		);
+		return NextResponse.json(
+			{
+				success: true,
+				skipped: true,
+				reason: "backup_cron_disabled",
+				hint: "Set VERCEL_CRON_BACKUP_ENABLED=true in Vercel environment variables.",
+				traceId,
+				timestamp: new Date().toISOString(),
+			},
+			{ status: 200 },
+		);
+	}
+
+	// ── 3. Worker heartbeat check — skip if Oracle worker is alive ─────────────
+	try {
+		const heartbeat = await getWorkerHeartbeat("main");
+		if (heartbeat && heartbeat.secondsAgo <= WORKER_FRESHNESS_SECONDS) {
+			console.log(
+				`[ODOO_CRON] Oracle Worker heartbeat is fresh (${heartbeat.secondsAgo}s ago on ${heartbeat.hostname}). Skipping backup sync.`,
+			);
+			return NextResponse.json({
+				success: true,
+				skipped: true,
+				reason: "worker_heartbeat_fresh",
+				workerSecondsAgo: heartbeat.secondsAgo,
+				workerHostname: heartbeat.hostname,
+				traceId,
+				timestamp: new Date().toISOString(),
+			});
+		}
+		if (heartbeat) {
+			console.log(
+				`[ODOO_CRON] Oracle Worker heartbeat is STALE (${heartbeat.secondsAgo}s ago). Proceeding with backup sync.`,
+			);
+		} else {
+			console.log(
+				"[ODOO_CRON] No Oracle Worker heartbeat found. Proceeding with backup sync.",
+			);
+		}
+	} catch (heartbeatErr) {
+		// Non-fatal: if we cannot read the heartbeat, proceed with the backup sync.
+		console.warn(
+			"[ODOO_CRON] Failed to read worker heartbeat (proceeding with backup sync):",
+			heartbeatErr instanceof Error
+				? heartbeatErr.message
+				: String(heartbeatErr),
+		);
+	}
+
+	// ── 4. PostgreSQL advisory lock — prevent concurrent Vercel invocations ────
+	const lockAcquired = await tryAcquireCronLock();
+	if (!lockAcquired) {
+		console.log(
+			"[ODOO_CRON] Advisory lock already held — another Vercel Cron invocation is running. Skipping.",
 		);
 		return NextResponse.json({
 			success: true,
 			skipped: true,
-			reason:
-				"Legacy cron sync is disabled — Oracle Worker is the primary sync engine. Set LEGACY_CRON_SYNC_ENABLED=true to re-enable this backup path.",
+			reason: "sync_already_running",
+			traceId,
 			timestamp: new Date().toISOString(),
 		});
 	}
 
-	console.log("[ODOO_CRON_REGISTERED]", new Date().toISOString());
 	console.log(
-		"[ODOO_CRON] Starting 1-minute scheduled incremental backup sync...",
+		`[ODOO_CRON] Starting incremental backup sync (traceId: ${traceId})...`,
 	);
 
+	// ── 5. Incremental backup sync ─────────────────────────────────────────────
+	// Uses the same entity sync functions as the Oracle Worker (queue.ts) — not
+	// the deprecated runSyncPipeline(). Business logic is unchanged.
+	let totalRecords = 0;
+	const entityErrors: string[] = [];
+
 	try {
-		await runSyncPipeline();
-		const durationMs = Date.now() - startTime;
-		const durationSec = (durationMs / 1000).toFixed(1);
+		const client = new OdooClient();
+		await client.authenticate();
 
-		console.log(
-			`[ODOO_CRON] Successfully completed backup sync in ${durationSec}s`,
+		// Products
+		const productsStart = new Date().toISOString();
+		try {
+			const lastSync = await getLastSyncTime("products");
+			const count = await syncProducts(client, lastSync);
+			totalRecords += count;
+			await logSyncTelemetry(
+				"products",
+				productsStart,
+				new Date().toISOString(),
+				"success",
+				count,
+				null,
+				0,
+				0,
+				"active",
+				{ traceId, workerId: "vercel_cron" },
+			);
+		} catch (err: any) {
+			const msg = `products: ${err?.message ?? String(err)}`;
+			entityErrors.push(msg);
+			console.error("[ODOO_CRON] Products sync error:", err?.message);
+			await logSyncTelemetry(
+				"products",
+				productsStart,
+				new Date().toISOString(),
+				"failed",
+				0,
+				err?.message ?? null,
+				0,
+				0,
+				"active",
+				{ traceId, workerId: "vercel_cron" },
+			);
+		}
+
+		// Customers
+		const customersStart = new Date().toISOString();
+		try {
+			const lastSync = await getLastSyncTime("customers");
+			const count = await syncCustomers(client, lastSync);
+			totalRecords += count;
+			await logSyncTelemetry(
+				"customers",
+				customersStart,
+				new Date().toISOString(),
+				"success",
+				count,
+				null,
+				0,
+				0,
+				"active",
+				{ traceId, workerId: "vercel_cron" },
+			);
+		} catch (err: any) {
+			const msg = `customers: ${err?.message ?? String(err)}`;
+			entityErrors.push(msg);
+			console.error("[ODOO_CRON] Customers sync error:", err?.message);
+			await logSyncTelemetry(
+				"customers",
+				customersStart,
+				new Date().toISOString(),
+				"failed",
+				0,
+				err?.message ?? null,
+				0,
+				0,
+				"active",
+				{ traceId, workerId: "vercel_cron" },
+			);
+		}
+
+		// Sales (sale.order + pos.order)
+		const salesStart = new Date().toISOString();
+		try {
+			const lastSync = await getLastSyncTime("sales");
+			const count = await syncSales(client, lastSync);
+			totalRecords += count;
+			await logSyncTelemetry(
+				"sales",
+				salesStart,
+				new Date().toISOString(),
+				"success",
+				count,
+				null,
+				0,
+				0,
+				"active",
+				{ traceId, workerId: "vercel_cron" },
+			);
+		} catch (err: any) {
+			const msg = `sales: ${err?.message ?? String(err)}`;
+			entityErrors.push(msg);
+			console.error("[ODOO_CRON] Sales sync error:", err?.message);
+			await logSyncTelemetry(
+				"sales",
+				salesStart,
+				new Date().toISOString(),
+				"failed",
+				0,
+				err?.message ?? null,
+				0,
+				0,
+				"active",
+				{ traceId, workerId: "vercel_cron" },
+			);
+		}
+
+		// Inventory (stock.quant snapshot)
+		const inventoryStart = new Date().toISOString();
+		try {
+			const count = await syncInventory(client);
+			totalRecords += count;
+			await logSyncTelemetry(
+				"inventory",
+				inventoryStart,
+				new Date().toISOString(),
+				"success",
+				count,
+				null,
+				0,
+				0,
+				"active",
+				{ traceId, workerId: "vercel_cron" },
+			);
+		} catch (err: any) {
+			const msg = `inventory: ${err?.message ?? String(err)}`;
+			entityErrors.push(msg);
+			console.error("[ODOO_CRON] Inventory sync error:", err?.message);
+			await logSyncTelemetry(
+				"inventory",
+				inventoryStart,
+				new Date().toISOString(),
+				"failed",
+				0,
+				err?.message ?? null,
+				0,
+				0,
+				"active",
+				{ traceId, workerId: "vercel_cron" },
+			);
+		}
+
+		// ── 6. Cache invalidation ──────────────────────────────────────────────
+		if (totalRecords > 0) {
+			await invalidateDashboardCache();
+		}
+	} catch (authErr: any) {
+		await releaseCronLock();
+		const durationMs = Date.now() - startTime;
+		console.error("[ODOO_CRON] Odoo authentication failed:", authErr?.message);
+		await logSyncTelemetry(
+			"full",
+			new Date(startTime).toISOString(),
+			new Date().toISOString(),
+			"failed",
+			0,
+			`auth: ${authErr?.message}`,
+			0,
+			0,
+			"active",
+			{ traceId, workerId: "vercel_cron", durationMs },
 		);
-
-		return NextResponse.json({
-			success: true,
-			timestamp: new Date().toISOString(),
-			duration: `${durationSec}s`,
-			durationMs,
-			message: "Odoo backup sync completed successfully.",
-		});
-	} catch (error: any) {
-		const durationMs = Date.now() - startTime;
-		console.error("[ODOO_CRON] Backup sync failed:", error.message);
 		return NextResponse.json(
 			{
 				success: false,
-				error: error.message || "Cron sync pipeline error",
+				error: "Odoo authentication failed",
+				detail: authErr?.message,
+				traceId,
 				timestamp: new Date().toISOString(),
 				durationMs,
 			},
-			{ status: 500 },
+			{ status: 502 },
 		);
+	} finally {
+		await releaseCronLock();
 	}
+
+	// ── 7. Final telemetry ─────────────────────────────────────────────────────
+	const durationMs = Date.now() - startTime;
+	const hasErrors = entityErrors.length > 0;
+
+	await logSyncTelemetry(
+		"full",
+		new Date(startTime).toISOString(),
+		new Date().toISOString(),
+		hasErrors ? "failed" : "success",
+		totalRecords,
+		hasErrors ? entityErrors.join("; ") : null,
+		0,
+		0,
+		"active",
+		{ traceId, workerId: "vercel_cron", durationMs },
+	);
+
+	console.log(
+		`[ODOO_CRON] Backup sync complete — records: ${totalRecords}, errors: ${entityErrors.length}, duration: ${durationMs}ms, traceId: ${traceId}`,
+	);
+
+	return NextResponse.json({
+		success: !hasErrors,
+		traceId,
+		timestamp: new Date().toISOString(),
+		durationMs,
+		totalRecords,
+		...(hasErrors && { errors: entityErrors }),
+	});
 }
 
 export async function POST(req: NextRequest) {

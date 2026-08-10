@@ -1,0 +1,53 @@
+# systemd service unit for the Oracle-layer worker health monitor.
+# This is the "Oracle cron" layer: runs check-worker-health.mjs every 2
+# minutes (driven by worker-health-check.timer). If the worker heartbeat is
+# stale, it attempts an automatic restart via PM2 / systemd.
+#
+# Architecture role:
+#   Layer 1 (primary)   → zenzebra-worker.service  (always-on Oracle Worker)
+#   Layer 2 (monitor)   → this unit  (health monitor + auto-restart trigger)
+#   Layer 3 (backup)    → Vercel Cron /api/cron/odoo-sync  (external DB-level fallback)
+#
+# Install:
+#   sudo cp deploy/worker-health-check.service /etc/systemd/system/
+#   sudo cp deploy/worker-health-check.timer   /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now worker-health-check.timer
+#   journalctl -u worker-health-check.service -f
+
+[Unit]
+Description=ZenZebra Sync Worker Health Check & Auto-Recovery
+# Requires the worker to be installed, but does not require it to be running
+# right now — that's the whole point of this service.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=zenzebra
+WorkingDirectory=/opt/zenzebra-sales-crm
+EnvironmentFile=/etc/zenzebra/worker.env
+Environment=NODE_ENV=production
+
+# Run the health check. If it exits 1 (stale/missing heartbeat), attempt
+# to restart the worker via PM2 (primary supervisor). Adjust the restart
+# command to match your chosen supervisor (PM2 / systemd / Docker).
+ExecStart=/bin/bash -c '\
+  node scripts/check-worker-health.mjs; \
+  STATUS=$?; \
+  if [ $STATUS -ne 0 ]; then \
+    echo "[health-monitor] Worker appears unhealthy (exit $STATUS). Triggering restart..."; \
+    pm2 restart zenzebra-sync-worker --update-env || \
+    systemctl restart zenzebra-worker || \
+    echo "[health-monitor] WARNING: Could not restart worker — check supervisor configuration."; \
+  fi; \
+  exit 0'
+
+# Never mark this unit as failed: health check exit codes drive the restart
+# logic above, but the monitor itself should always be considered successful
+# so the timer keeps firing even after a failed restart attempt.
+SuccessExitStatus=0 1
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=zenzebra-health-monitor
