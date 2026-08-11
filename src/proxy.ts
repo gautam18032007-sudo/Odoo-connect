@@ -9,6 +9,7 @@ const publicPaths = [
 	"/api/auth/verify",
 	"/api/public",
 	"/api/webhooks",
+	"/api/cron",
 	// Called by the Oracle-hosted worker process, not a logged-in browser —
 	// self-authenticates via INTERNAL_API_SECRET, same pattern as webhooks.
 	"/api/internal",
