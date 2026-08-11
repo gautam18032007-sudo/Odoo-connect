@@ -19,31 +19,52 @@ export const dynamic = "force-dynamic";
 // Must match HEARTBEAT_FRESHNESS_SECONDS in /api/sync/status and /api/health.
 const WORKER_FRESHNESS_SECONDS = 120;
 
-// Vercel Cron sends `Authorization: Bearer <CRON_SECRET>` automatically when
-// CRON_SECRET is set in the Vercel project environment.
-// Ref: https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs
-function isAuthorized(req: NextRequest): boolean {
+// Authentication returns one of three states:
+//   "ok"            — valid Authorization: Bearer <CRON_SECRET> header
+//   "unauthorized"  — header missing or wrong secret (→ 401)
+//   "misconfigured" — CRON_SECRET env var not set in production (→ 500)
+//
+// cron-job.org must send: Authorization: Bearer <CRON_SECRET>
+// No ?secret= query param is accepted (weaker auth surface removed).
+// In NODE_ENV=development with no CRON_SECRET set, requests are allowed
+// so local testing does not require configuring a secret.
+type AuthResult = "ok" | "unauthorized" | "misconfigured";
+
+function checkAuth(req: NextRequest): AuthResult {
 	const expectedSecret = process.env.CRON_SECRET;
 	if (!expectedSecret) {
-		// No secret configured: allow (local dev / first-time setup).
-		// Log clearly so the omission is visible in function logs.
-		console.warn(
-			"[ODOO_CRON] CRON_SECRET is not set — accepting unauthenticated request. Set CRON_SECRET in Vercel environment variables.",
+		if (process.env.NODE_ENV === "development") {
+			console.warn(
+				"[ODOO_CRON] CRON_SECRET not set — development bypass active. Set CRON_SECRET before deploying.",
+			);
+			return "ok";
+		}
+		// Production with no CRON_SECRET = server misconfiguration, not a client auth error.
+		console.error(
+			"[ODOO_CRON] CRON_SECRET is not configured. Set it in Vercel environment variables.",
 		);
-		return true;
+		return "misconfigured";
 	}
 	const authHeader =
 		req.headers.get("authorization") || req.headers.get("Authorization");
 	const bearerToken = authHeader?.startsWith("Bearer ")
 		? authHeader.substring(7)
 		: null;
-	const querySecret = req.nextUrl.searchParams.get("secret");
-	const provided = bearerToken ?? querySecret ?? "";
-	return provided === expectedSecret;
+	// Constant-time comparison is not available in edge/Node without crypto,
+	// but CRON_SECRET is not a cryptographic key — timing attacks are not a
+	// realistic threat for a cron-job.org IP-sourced request. Simple equality.
+	if (!bearerToken || bearerToken !== expectedSecret) {
+		return "unauthorized";
+	}
+	return "ok";
 }
 
 /**
- * GET /api/cron/odoo-sync  (canonical Vercel Cron backup path)
+ * GET /api/cron/odoo-sync  (external backup scheduler endpoint)
+ *
+ * External caller: cron-job.org fires every 2 minutes with:
+ *   Authorization: Bearer <CRON_SECRET>
+ * This route does NOT depend on Vercel's cron configuration.
  *
  * Architecture:
  *   Primary sync  → Oracle always-on worker (`src/lib/odoo/sync/worker.ts`)
@@ -51,8 +72,8 @@ function isAuthorized(req: NextRequest): boolean {
  *
  * Coordination guarantee (three-layer):
  *   1. Heartbeat check  — skips if the Oracle worker wrote a heartbeat < 120 s ago.
- *   2. Advisory lock    — pg_try_advisory_lock prevents two concurrent Vercel
- *                         invocations from racing each other.
+ *   2. Advisory lock    — pg_try_advisory_lock prevents two concurrent invocations
+ *                         from racing each other.
  *   3. Idempotent ops   — all DB writes use ON CONFLICT DO UPDATE, so an
  *                         accidental overlap is safe in the worst case.
  *
@@ -65,7 +86,15 @@ export async function GET(req: NextRequest) {
 	const startTime = Date.now();
 
 	// ── 1. Authentication ──────────────────────────────────────────────────────
-	if (!isAuthorized(req)) {
+	// checkAuth distinguishes misconfiguration (500) from bad credentials (401).
+	const authResult = checkAuth(req);
+	if (authResult === "misconfigured") {
+		return NextResponse.json(
+			{ error: "Server misconfiguration: CRON_SECRET is not configured." },
+			{ status: 500 },
+		);
+	}
+	if (authResult === "unauthorized") {
 		console.warn("[ODOO_CRON] Rejected unauthorized cron trigger attempt");
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}

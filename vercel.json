@@ -3,11 +3,5 @@
   "outputDirectory": ".next",
   "installCommand": "npm ci",
   "framework": "nextjs",
-  "regions": ["sin1"],
-  "crons": [
-    {
-      "path": "/api/cron/odoo-sync",
-      "schedule": "*/2 * * * *"
-    }
-  ]
+  "regions": ["sin1"]
 }
