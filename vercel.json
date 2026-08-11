@@ -6,8 +6,8 @@
   "regions": ["sin1"],
   "crons": [
     {
-      "path": "/api/cron",
-      "schedule": "*/2 * * * *"
+      "path": "/api/admin/odoo-sync?mode=delta",
+      "schedule": "0 0 * * *"
     }
   ]
 }

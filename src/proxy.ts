@@ -10,6 +10,7 @@ const publicPaths = [
 	"/api/public",
 	"/api/webhooks",
 	"/api/cron",
+	"/api/admin/odoo-sync",
 	// Called by the Oracle-hosted worker process, not a logged-in browser —
 	// self-authenticates via INTERNAL_API_SECRET, same pattern as webhooks.
 	"/api/internal",
