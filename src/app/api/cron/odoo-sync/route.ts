@@ -304,7 +304,6 @@ export async function GET(req: NextRequest) {
 			await invalidateDashboardCache();
 		}
 	} catch (authErr: any) {
-		await releaseCronLock();
 		const durationMs = Date.now() - startTime;
 		console.error("[ODOO_CRON] Odoo authentication failed:", authErr?.message);
 		await logSyncTelemetry(
