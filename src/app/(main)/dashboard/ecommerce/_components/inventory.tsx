@@ -36,25 +36,28 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export function Inventory({ data }: { data: any }) {
-	const unitsSold = data?.salesKpis?.unitsSold?.current || 1000;
+	const overview = data?.inventoryOverview || data?.inventory || data || {};
 
-	// Derive dynamic stock status based on actual units sold in the database
+	// Derive stock status from actual synchronized Odoo inventory data in database
 	const { inStock, lowStock, outOfStock, availablePercent, gaugeSegments } =
 		useMemo(() => {
-			const inStockVal = Math.round(unitsSold * 1.5);
-			const lowStockVal = Math.round(unitsSold * 0.4);
-			const outOfStockVal = Math.round(unitsSold * 0.1) || 5;
+			const inStockVal = Math.max(0, Number(overview.healthyStockCount ?? 0));
+			const lowStockVal = Math.max(0, Number(overview.lowStockCount ?? 0));
+			const outOfStockVal = Math.max(0, Number(overview.outOfStockCount ?? 0));
 
 			const totalVal = inStockVal + lowStockVal + outOfStockVal;
-			const availPercent = Math.round((inStockVal / totalVal) * 100);
+			const availPercent =
+				totalVal > 0 ? Math.round((inStockVal / totalVal) * 100) : 0;
 
 			const gaugeSegmentCount = 32;
-			const inStockSegments = Math.round(
-				(inStockVal / totalVal) * gaugeSegmentCount,
-			);
-			const lowStockSegments = Math.round(
-				(lowStockVal / totalVal) * gaugeSegmentCount,
-			);
+			const inStockSegments =
+				totalVal > 0
+					? Math.round((inStockVal / totalVal) * gaugeSegmentCount)
+					: 0;
+			const lowStockSegments =
+				totalVal > 0
+					? Math.round((lowStockVal / totalVal) * gaugeSegmentCount)
+					: 0;
 
 			const segments = Array.from({ length: gaugeSegmentCount }, (_, index) => {
 				const status =
@@ -79,7 +82,7 @@ export function Inventory({ data }: { data: any }) {
 				availablePercent: availPercent,
 				gaugeSegments: segments,
 			};
-		}, [unitsSold]);
+		}, [overview]);
 
 	const inventorySummary = [
 		{

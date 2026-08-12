@@ -1,4 +1,5 @@
 import type { NeonQueryFunction } from "@neondatabase/serverless";
+import { CUSTOMER_IDENTITY_KEY_SQL } from "@/lib/business-logic/customer-identity";
 import { FOOD_CATEGORIES } from "@/lib/business-logic/filter-sql";
 import type { DashboardFilters } from "@/lib/founder/types";
 
@@ -27,31 +28,31 @@ export async function getCohortMetrics(
 	const query = `
     WITH customer_first_bill AS (
       SELECT
-        customer_mobile,
+        (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
         MIN(sale_date) AS first_date,
         MIN(bill_no) AS first_bill_no,
         COUNT(DISTINCT bill_no) AS total_orders
       FROM sales_fact_v
-      WHERE customer_mobile IS NOT NULL AND customer_mobile <> ''
+      WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
         AND ($1::text IS NULL OR billed_by = $1)
         AND ($2::text[] IS NULL OR category <> ALL($2::text[]))
-      GROUP BY customer_mobile
+      GROUP BY (${CUSTOMER_IDENTITY_KEY_SQL})
     ),
     first_bill_amounts AS (
       SELECT
-        fb.customer_mobile,
+        fb.customer_key,
         fb.total_orders,
         SUM(sf.net_amount) AS first_bill_amount
       FROM customer_first_bill fb
-      JOIN sales_fact_v sf ON fb.customer_mobile = sf.customer_mobile AND fb.first_bill_no = sf.bill_no
-      GROUP BY fb.customer_mobile, fb.total_orders
+      JOIN sales_fact_v sf ON (${CUSTOMER_IDENTITY_KEY_SQL}) = fb.customer_key AND fb.first_bill_no = sf.bill_no
+      GROUP BY fb.customer_key, fb.total_orders
     ),
     customer_cohort AS (
       SELECT
-        fba.customer_mobile,
+        fba.customer_key,
         DATE_TRUNC('month', fb.first_date)::date AS cohort_month
       FROM first_bill_amounts fba
-      JOIN customer_first_bill fb ON fba.customer_mobile = fb.customer_mobile
+      JOIN customer_first_bill fb ON fba.customer_key = fb.customer_key
       WHERE (
         $3::text = 'all'
         OR ($3::text = 'new' AND (fba.total_orders = 1 OR (CURRENT_DATE - fb.first_date) <= 30))
@@ -68,34 +69,34 @@ export async function getCohortMetrics(
     ),
     customer_activity AS (
       SELECT
-        sf.customer_mobile,
+        (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
         DATE_TRUNC('month', sf.sale_date)::date AS activity_month,
         SUM(sf.net_amount) AS revenue,
         COUNT(DISTINCT sf.bill_no) AS bills,
         SUM(sf.quantity) AS units
       FROM sales_fact_v sf
-      WHERE sf.customer_mobile IS NOT NULL AND sf.customer_mobile <> ''
+      WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
         AND ($1::text IS NULL OR sf.billed_by = $1)
         AND ($2::text[] IS NULL OR sf.category <> ALL($2::text[]))
-      GROUP BY sf.customer_mobile, activity_month
+      GROUP BY (${CUSTOMER_IDENTITY_KEY_SQL}), activity_month
     ),
     cohort_size AS (
       SELECT
         cohort_month,
-        COUNT(DISTINCT customer_mobile) AS cohort_customers
+        COUNT(DISTINCT customer_key) AS cohort_customers
       FROM customer_cohort
       GROUP BY cohort_month
     )
     SELECT
-      cc.cohort_month::text AS cohort_month,
+      to_char(cc.cohort_month, 'YYYY-MM-DD') AS cohort_month,
       cs.cohort_customers::integer AS cohort_customers,
       ((EXTRACT(YEAR FROM age(ca.activity_month, cc.cohort_month)) * 12) + EXTRACT(MONTH FROM age(ca.activity_month, cc.cohort_month)))::integer AS month_index,
-      COUNT(DISTINCT ca.customer_mobile)::integer AS active_customers,
+      COUNT(DISTINCT ca.customer_key)::integer AS active_customers,
       SUM(ca.revenue)::numeric AS revenue,
       SUM(ca.bills)::integer AS bills,
       SUM(ca.units)::integer AS units
     FROM customer_cohort cc
-    JOIN customer_activity ca ON cc.customer_mobile = ca.customer_mobile
+    JOIN customer_activity ca ON cc.customer_key = ca.customer_key
     JOIN cohort_size cs ON cc.cohort_month = cs.cohort_month
     WHERE ca.activity_month >= cc.cohort_month
     GROUP BY cc.cohort_month, cs.cohort_customers, month_index
@@ -172,8 +173,10 @@ export async function getCohortMetrics(
 	];
 	const formattedCohorts = Object.entries(cohortsMap)
 		.map(([rawDate, data]) => {
-			const dateObj = new Date(rawDate);
-			const cohortLabel = `${monthsList[dateObj.getUTCMonth()]} ${dateObj.getUTCFullYear()}`;
+			const [yearStr, monthStr] = rawDate.split("-");
+			const year = Number.parseInt(yearStr || "2026", 10);
+			const monthIdx = Number.parseInt(monthStr || "01", 10) - 1;
+			const cohortLabel = `${monthsList[monthIdx] || "Jan"} ${year}`;
 
 			const monthValues = Array.from({ length: 6 }, (_, i) => {
 				const mData = data.months[i];
@@ -209,28 +212,28 @@ export async function getBillCutCohorts(
 	const query = `
     WITH customer_first_bill AS (
       SELECT
-        customer_mobile,
+        (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
         MIN(sale_date) AS first_date,
         MIN(bill_no) AS first_bill_no,
         COUNT(DISTINCT bill_no) AS total_orders
       FROM sales_fact_v
-      WHERE customer_mobile IS NOT NULL AND customer_mobile <> ''
+      WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
         AND ($1::text IS NULL OR billed_by = $1)
         AND ($2::text[] IS NULL OR category <> ALL($2::text[]))
-      GROUP BY customer_mobile
+      GROUP BY (${CUSTOMER_IDENTITY_KEY_SQL})
     ),
     first_bill_amounts AS (
       SELECT
-        fb.customer_mobile,
+        fb.customer_key,
         fb.total_orders,
         SUM(sf.net_amount) AS first_bill_amount
       FROM customer_first_bill fb
-      JOIN sales_fact_v sf ON fb.customer_mobile = sf.customer_mobile AND fb.first_bill_no = sf.bill_no
-      GROUP BY fb.customer_mobile, fb.total_orders
+      JOIN sales_fact_v sf ON (${CUSTOMER_IDENTITY_KEY_SQL}) = fb.customer_key AND fb.first_bill_no = sf.bill_no
+      GROUP BY fb.customer_key, fb.total_orders
     ),
     customer_bill_cut AS (
       SELECT
-        customer_mobile,
+        customer_key,
         total_orders,
         CASE
           WHEN first_bill_amount <= 500 THEN '0-500'
@@ -245,8 +248,8 @@ export async function getBillCutCohorts(
     SELECT
       bill_range AS "billRange",
       COUNT(*)::integer AS "totalCustomers",
-      COUNT(DISTINCT customer_mobile) FILTER (WHERE total_orders > 1)::integer AS "repeatCustomers",
-      ROUND(COUNT(DISTINCT customer_mobile) FILTER (WHERE total_orders > 1) * 100.0 / NULLIF(COUNT(*), 0))::integer AS "retentionPct",
+      COUNT(DISTINCT customer_key) FILTER (WHERE total_orders > 1)::integer AS "repeatCustomers",
+      ROUND(COUNT(DISTINCT customer_key) FILTER (WHERE total_orders > 1) * 100.0 / NULLIF(COUNT(*), 0))::integer AS "retentionPct",
       MIN(first_bill_amount) AS min_amt
     FROM customer_bill_cut
     GROUP BY bill_range

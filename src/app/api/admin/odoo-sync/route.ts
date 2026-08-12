@@ -16,14 +16,14 @@ export async function GET(req: NextRequest) {
 		req.headers.get("authorization") || req.headers.get("Authorization");
 	const cronSecret = process.env.CRON_SECRET;
 
-	if (!cronSecret && process.env.NODE_ENV === "production") {
+	if (!cronSecret) {
 		return NextResponse.json(
 			{ error: "Cron authentication is not configured" },
 			{ status: 500 },
 		);
 	}
 
-	if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+	if (authHeader !== `Bearer ${cronSecret}`) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 

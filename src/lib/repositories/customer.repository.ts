@@ -1,3 +1,4 @@
+import { CUSTOMER_IDENTITY_KEY_SQL } from "@/lib/business-logic/customer-identity";
 import { sql } from "@/lib/db";
 
 export interface CohortLtvRow {
@@ -17,11 +18,11 @@ export const customerRepository = {
 	async getLtvValue(store: string | null): Promise<number> {
 		const query = `
       WITH customer_rev AS (
-        SELECT customer_mobile, SUM(net_amount) AS total_revenue
+        SELECT (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key, SUM(net_amount) AS total_revenue
         FROM sales_fact_v
-        WHERE customer_mobile IS NOT NULL AND customer_mobile <> ''
+        WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
           AND ($1::text IS NULL OR billed_by = $1)
-        GROUP BY customer_mobile
+        GROUP BY (${CUSTOMER_IDENTITY_KEY_SQL})
       )
       SELECT COALESCE(AVG(total_revenue), 0)::numeric AS ltv
       FROM customer_rev
@@ -38,16 +39,16 @@ export const customerRepository = {
 	): Promise<number> {
 		const query = `
       WITH customer_first_purchase AS (
-        SELECT customer_mobile, MIN(sale_date) AS first_purchase_date
+        SELECT (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key, MIN(sale_date) AS first_purchase_date
         FROM sales_fact_v
-        WHERE customer_mobile IS NOT NULL AND customer_mobile <> ''
-        GROUP BY customer_mobile
+        WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
+        GROUP BY (${CUSTOMER_IDENTITY_KEY_SQL})
       )
-      SELECT COUNT(DISTINCT cfp.customer_mobile)::integer AS new_customers
+      SELECT COUNT(DISTINCT cfp.customer_key)::integer AS new_customers
       FROM customer_first_purchase cfp
       WHERE cfp.first_purchase_date BETWEEN $1::date AND $2::date
-        AND ($3::text IS NULL OR cfp.customer_mobile IN (
-          SELECT DISTINCT customer_mobile FROM sales_fact_v WHERE billed_by = $3
+        AND ($3::text IS NULL OR cfp.customer_key IN (
+          SELECT DISTINCT (${CUSTOMER_IDENTITY_KEY_SQL}) FROM sales_fact_v WHERE billed_by = $3
         ))
     `;
 		const rows = await sql.query(query, [startDate, endDate, store]);
@@ -82,12 +83,12 @@ export const customerRepository = {
 		const query = `
       WITH customer_bills AS (
         SELECT 
-          customer_mobile,
+          (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
           net_amount,
-          ROW_NUMBER() OVER(PARTITION BY customer_mobile ORDER BY sale_date ASC, bill_no ASC) as rn_asc,
-          ROW_NUMBER() OVER(PARTITION BY customer_mobile ORDER BY sale_date DESC, bill_no DESC) as rn_desc
+          ROW_NUMBER() OVER(PARTITION BY (${CUSTOMER_IDENTITY_KEY_SQL}) ORDER BY sale_date ASC, bill_no ASC) as rn_asc,
+          ROW_NUMBER() OVER(PARTITION BY (${CUSTOMER_IDENTITY_KEY_SQL}) ORDER BY sale_date DESC, bill_no DESC) as rn_desc
         FROM sales_fact_v
-        WHERE customer_mobile IS NOT NULL AND customer_mobile <> ''
+        WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
           AND ($1::text IS NULL OR billed_by = $1)
       ),
       first_orders AS (
@@ -114,16 +115,16 @@ export const customerRepository = {
 		const query = `
       WITH customer_first_purchase AS (
         SELECT 
-          customer_mobile,
+          (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
           MIN(sale_date) AS first_purchase_date
         FROM sales_fact_v
-        WHERE customer_mobile IS NOT NULL AND customer_mobile <> ''
+        WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
           AND ($1::text IS NULL OR billed_by = $1)
-        GROUP BY customer_mobile
+        GROUP BY (${CUSTOMER_IDENTITY_KEY_SQL})
       ),
       cohort_customers AS (
         SELECT 
-          customer_mobile,
+          customer_key,
           first_purchase_date,
           DATE_TRUNC('month', first_purchase_date)::date AS cohort_month
         FROM customer_first_purchase
@@ -131,13 +132,13 @@ export const customerRepository = {
       cohort_sizes AS (
         SELECT 
           cohort_month,
-          COUNT(DISTINCT customer_mobile) AS cohort_size
+          COUNT(DISTINCT customer_key) AS cohort_size
         FROM cohort_customers
         GROUP BY cohort_month
       ),
       customer_sales AS (
         SELECT 
-          sf.customer_mobile,
+          (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
           cc.cohort_month,
           cc.first_purchase_date,
           sf.net_amount,
@@ -145,18 +146,18 @@ export const customerRepository = {
           ((EXTRACT(year FROM sf.sale_date) - EXTRACT(year FROM cc.first_purchase_date)) * 12 +
            (EXTRACT(month FROM sf.sale_date) - EXTRACT(month FROM cc.first_purchase_date)))::integer AS months_since_first
         FROM sales_fact_v sf
-        JOIN cohort_customers cc ON sf.customer_mobile = cc.customer_mobile
+        JOIN cohort_customers cc ON (${CUSTOMER_IDENTITY_KEY_SQL}) = cc.customer_key
         WHERE ($1::text IS NULL OR sf.billed_by = $1)
       ),
       cohort_months_revenue AS (
         SELECT 
           cohort_month,
-          customer_mobile,
+          customer_key,
           SUM(CASE WHEN months_since_first <= 0 THEN net_amount ELSE 0 END) AS rev_m0,
           SUM(CASE WHEN months_since_first <= 3 THEN net_amount ELSE 0 END) AS rev_m3,
           SUM(CASE WHEN months_since_first <= 6 THEN net_amount ELSE 0 END) AS rev_m6
         FROM customer_sales
-        GROUP BY cohort_month, customer_mobile
+        GROUP BY cohort_month, customer_key
       )
       SELECT 
         cmr.cohort_month::text AS cohort_month_raw,
@@ -177,11 +178,11 @@ export const customerRepository = {
 		const query = `
       WITH customer_ordered_bills AS (
         SELECT 
-          customer_mobile,
+          (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
           net_amount,
-          ROW_NUMBER() OVER(PARTITION BY customer_mobile ORDER BY sale_date ASC, bill_no ASC) as order_num
+          ROW_NUMBER() OVER(PARTITION BY (${CUSTOMER_IDENTITY_KEY_SQL}) ORDER BY sale_date ASC, bill_no ASC) as order_num
         FROM sales_fact_v
-        WHERE customer_mobile IS NOT NULL AND customer_mobile <> ''
+        WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
           AND ($1::text IS NULL OR billed_by = $1)
       ),
       grouped_orders AS (

@@ -179,30 +179,48 @@ export async function upsertSalesLines(
 ): Promise<number[]> {
 	if (lines.length === 0) return [];
 
-	// Batch the FK-existence check into one query instead of one per line —
-	// cuts Neon round-trips roughly in half, which matters under concurrent
-	// load (this HTTP-based driver has no connection pool and can fail with
-	// "fetch failed" when hammered with hundreds of rapid sequential calls).
 	const productIds = [...new Set(lines.map((l) => l.productId))];
 	const existingRows = await sql`
 		SELECT id FROM dim_products WHERE id = ANY(${productIds})
 	`;
 	const existingProductIds = new Set(existingRows.map((r) => r.id));
 	const missingProductIds: number[] = [];
+	const seenKeys = new Set<string>();
+	const validLines: OdooSalesLine[] = [];
 
 	for (const line of lines) {
 		if (!existingProductIds.has(line.productId)) {
 			missingProductIds.push(line.productId);
 			continue;
 		}
+		if (seenKeys.has(line.id)) continue;
+		seenKeys.add(line.id);
+		validLines.push(line);
+	}
+
+	if (validLines.length > 0) {
+		const ids = validLines.map((l) => l.id);
+		const orderIds = validLines.map((l) => l.orderId);
+		const pIds = validLines.map((l) => l.productId);
+		const priceUnits = validLines.map((l) => Number(l.priceUnit || 0));
+		const discounts = validLines.map((l) => Number(l.discount || 0));
+		const qtys = validLines.map((l) => Number(l.qty || 0));
+		const priceSubtotals = validLines.map((l) => Number(l.priceSubtotal || 0));
+		const taxAmounts = validLines.map((l) => Number(l.taxAmount || 0));
 
 		await sql`
 			INSERT INTO fact_sales_lines (
 				id, order_id, product_id, price_unit, discount, qty, price_subtotal, tax_amount
-			) VALUES (
-				${line.id}, ${line.orderId}, ${line.productId}, ${Number(line.priceUnit || 0)},
-				${Number(line.discount || 0)}, ${Number(line.qty || 0)}, ${Number(line.priceSubtotal || 0)},
-				${Number(line.taxAmount || 0)}
+			)
+			SELECT * FROM UNNEST(
+				${ids}::text[],
+				${orderIds}::text[],
+				${pIds}::int[],
+				${priceUnits}::numeric[],
+				${discounts}::numeric[],
+				${qtys}::numeric[],
+				${priceSubtotals}::numeric[],
+				${taxAmounts}::numeric[]
 			)
 			ON CONFLICT (id) DO UPDATE SET
 				order_id = EXCLUDED.order_id,
@@ -222,32 +240,45 @@ export async function upsertSalesLines(
 export async function upsertInventory(records: OdooInventory[]): Promise<void> {
 	if (records.length === 0) return;
 
-	// Batched existence check — see upsertSalesLines for why this matters.
+	// Batched existence check
 	const productIds = [...new Set(records.map((r) => r.productId))];
 	const existingRows = await sql`
 		SELECT id FROM dim_products WHERE id = ANY(${productIds})
 	`;
 	const existingProductIds = new Set(existingRows.map((r) => r.id));
 
-	for (const rec of records) {
-		if (!existingProductIds.has(rec.productId)) {
-			continue;
-		}
-
-		await sql`
-			INSERT INTO fact_inventory (
-				product_id, location_id, location_name, quantity, reserved_quantity
-			) VALUES (
-				${rec.productId}, ${rec.locationId}, ${rec.locationName || null},
-				${Number(rec.quantity || 0)}, ${Number(rec.reservedQuantity || 0)}
-			)
-			ON CONFLICT (product_id, location_id) DO UPDATE SET
-				location_name = EXCLUDED.location_name,
-				quantity = EXCLUDED.quantity,
-				reserved_quantity = EXCLUDED.reserved_quantity,
-				updated_at = NOW()
-		`;
+	const seenInventoryKeys = new Set<string>();
+	const validRecords: OdooInventory[] = [];
+	for (const r of records) {
+		if (!existingProductIds.has(r.productId)) continue;
+		const key = `${r.productId}_${r.locationId}`;
+		if (seenInventoryKeys.has(key)) continue;
+		seenInventoryKeys.add(key);
+		validRecords.push(r);
 	}
+	if (validRecords.length === 0) return;
+
+	const pIds = validRecords.map((r) => r.productId);
+	const lIds = validRecords.map((r) => r.locationId);
+	const lNames = validRecords.map((r) => r.locationName || null);
+	const qtys = validRecords.map((r) => Number(r.quantity || 0));
+	const resQtys = validRecords.map((r) => Number(r.reservedQuantity || 0));
+
+	await sql`
+		INSERT INTO fact_inventory (product_id, location_id, location_name, quantity, reserved_quantity)
+		SELECT * FROM UNNEST(
+			${pIds}::int[],
+			${lIds}::int[],
+			${lNames}::text[],
+			${qtys}::numeric[],
+			${resQtys}::numeric[]
+		)
+		ON CONFLICT (product_id, location_id) DO UPDATE SET
+			location_name = EXCLUDED.location_name,
+			quantity = EXCLUDED.quantity,
+			reserved_quantity = EXCLUDED.reserved_quantity,
+			updated_at = NOW()
+	`;
 }
 
 export async function getLastSyncTime(

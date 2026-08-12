@@ -33,15 +33,8 @@ type AuthResult = "ok" | "unauthorized" | "misconfigured";
 function checkAuth(req: NextRequest): AuthResult {
 	const expectedSecret = process.env.CRON_SECRET;
 	if (!expectedSecret) {
-		if (process.env.NODE_ENV === "development") {
-			console.warn(
-				"[ODOO_CRON] CRON_SECRET not set — development bypass active. Set CRON_SECRET before deploying.",
-			);
-			return "ok";
-		}
-		// Production with no CRON_SECRET = server misconfiguration, not a client auth error.
 		console.error(
-			"[ODOO_CRON] CRON_SECRET is not configured. Set it in Vercel environment variables.",
+			"[ODOO_CRON] CRON_SECRET is not configured. Set it in environment variables.",
 		);
 		return "misconfigured";
 	}
@@ -50,9 +43,7 @@ function checkAuth(req: NextRequest): AuthResult {
 	const bearerToken = authHeader?.startsWith("Bearer ")
 		? authHeader.substring(7)
 		: null;
-	// Constant-time comparison is not available in edge/Node without crypto,
-	// but CRON_SECRET is not a cryptographic key — timing attacks are not a
-	// realistic threat for a cron-job.org IP-sourced request. Simple equality.
+
 	if (!bearerToken || bearerToken !== expectedSecret) {
 		return "unauthorized";
 	}
@@ -60,64 +51,33 @@ function checkAuth(req: NextRequest): AuthResult {
 }
 
 /**
- * GET /api/cron/odoo-sync  (external backup scheduler endpoint)
+ * GET /api/cron/odoo-sync  (cron-job.org sync endpoint)
  *
- * External caller: cron-job.org fires every 2 minutes with:
+ * External caller: cron-job.org fires every 5 minutes with:
  *   Authorization: Bearer <CRON_SECRET>
- * This route does NOT depend on Vercel's cron configuration.
  *
- * Architecture:
- *   Primary sync  → Oracle always-on worker (`src/lib/odoo/sync/worker.ts`)
- *   Backup sync   → this route (fires only when the worker heartbeat is stale)
- *
- * Coordination guarantee (three-layer):
- *   1. Heartbeat check  — skips if the Oracle worker wrote a heartbeat < 120 s ago.
+ * Coordination guarantee:
+ *   1. Heartbeat check  — skips if an external worker wrote a heartbeat < 120 s ago.
  *   2. Advisory lock    — pg_try_advisory_lock prevents two concurrent invocations
  *                         from racing each other.
  *   3. Idempotent ops   — all DB writes use ON CONFLICT DO UPDATE, so an
  *                         accidental overlap is safe in the worst case.
- *
- * This route does NOT call runSyncPipeline() (the legacy uncoordinated full sync).
- * Instead it reuses the same individual entity sync functions the Oracle worker uses,
- * so business logic, SQL semantics, and KPI calculations are identical.
  */
 export async function GET(req: NextRequest) {
 	const traceId = `cron_${Date.now()}`;
 	const startTime = Date.now();
 
 	// ── 1. Authentication ──────────────────────────────────────────────────────
-	// checkAuth distinguishes misconfiguration (500) from bad credentials (401).
 	const authResult = checkAuth(req);
 	if (authResult === "misconfigured") {
 		return NextResponse.json(
-			{ error: "Server misconfiguration: CRON_SECRET is not configured." },
+			{ error: "Cron authentication is not configured" },
 			{ status: 500 },
 		);
 	}
 	if (authResult === "unauthorized") {
 		console.warn("[ODOO_CRON] Rejected unauthorized cron trigger attempt");
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-	}
-
-	// ── 2. Feature gate (opt-in for safety) ───────────────────────────────────
-	// Default OFF: the Oracle Worker is primary. Vercel Cron will only act as a
-	// live backup when VERCEL_CRON_BACKUP_ENABLED=true is explicitly set.
-	if (process.env.VERCEL_CRON_BACKUP_ENABLED !== "true") {
-		console.log(
-			"[ODOO_CRON] Backup cron is disabled (VERCEL_CRON_BACKUP_ENABLED != true). " +
-				"Set VERCEL_CRON_BACKUP_ENABLED=true in Vercel env to activate.",
-		);
-		return NextResponse.json(
-			{
-				success: true,
-				skipped: true,
-				reason: "backup_cron_disabled",
-				hint: "Set VERCEL_CRON_BACKUP_ENABLED=true in Vercel environment variables.",
-				traceId,
-				timestamp: new Date().toISOString(),
-			},
-			{ status: 200 },
-		);
 	}
 
 	// ── 3. Worker heartbeat check — skip if Oracle worker is alive ─────────────

@@ -25,6 +25,8 @@ async function main() {
 		"Updating sales_fact_v: category (from dim_products.category) and tax_amount (from fact_sales_lines.tax_amount)...",
 	);
 
+	await sql`DROP VIEW IF EXISTS sales_fact_v CASCADE`;
+
 	await sql`
 		CREATE OR REPLACE VIEW sales_fact_v AS
 		-- Part A: Legacy Excel Upload Data
@@ -39,6 +41,8 @@ async function main() {
 			GREATEST(0.00, mrp_amount - gross_amount)::numeric(12,2) AS discount_amount,
 			gross_amount, tax_amount, net_amount,
 			customer_mobile, customer_name, payment_method,
+			NULL::integer AS customer_id,
+			NULL::text AS customer_email,
 			CASE
 				WHEN billed_by = 'SmartworksNoida Noida' THEN 'Smart Works Noida'
 				WHEN billed_by = 'Klj store' THEN 'KLJ'
@@ -73,6 +77,8 @@ async function main() {
 			dc.mobile AS customer_mobile,
 			dc.name AS customer_name,
 			'Odoo POS' AS payment_method,
+			dc.id AS customer_id,
+			dc.email AS customer_email,
 			CASE
 				WHEN ds.code = 'KLJ' THEN 'KLJ'
 				WHEN ds.code = 'SWN' THEN 'Smart Works Noida'
