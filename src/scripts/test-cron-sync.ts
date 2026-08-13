@@ -25,9 +25,11 @@ async function main() {
 	const secret = process.env.CRON_SECRET || "zenzebra_cron_secret_2026";
 	process.env.CRON_SECRET = secret;
 
-	const req = new NextRequest(
-		`http://localhost:3000/api/cron/odoo-sync?secret=${secret}`,
-	);
+	const req = new NextRequest("http://localhost:3000/api/cron/odoo-sync", {
+		headers: {
+			authorization: `Bearer ${secret}`,
+		},
+	});
 	const res = await cronGet(req);
 	const data = await res.json();
 
