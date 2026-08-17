@@ -141,6 +141,12 @@ export async function getDailyHealthMetrics(
 	const metrics = [
 		{
 			metric: "Sales",
+			current: currentCollection,
+			previous: previousCollection,
+			growth: growthPct(currentCollection, previousCollection),
+		},
+		{
+			metric: "Net Revenue",
 			current: currentRevenue,
 			previous: previousRevenue,
 			growth: growthPct(currentRevenue, previousRevenue),

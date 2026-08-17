@@ -126,9 +126,15 @@ export async function getRetentionOverview(
 		Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
 	);
 
-	let monthlySpend = 200000;
-	if (store === "SmartworksNoida Noida") monthlySpend = 150000;
-	else if (store === "Klj store") monthlySpend = 50000;
+	const targetStore = store || "All Stores";
+	const spendRows = await db`
+		SELECT monthly_spend 
+		FROM dim_marketing_spend 
+		WHERE store_display_name ILIKE ${`%${targetStore}%`} 
+		LIMIT 1
+	`;
+	const monthlySpend =
+		spendRows.length > 0 ? Number(spendRows[0].monthly_spend) : 0;
 	const currentSpend = Math.round((monthlySpend / 30) * days);
 
 	const prevStart = new Date(periods.previousStart);
@@ -393,9 +399,15 @@ export async function getCustomerSegments(
 		1,
 		Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
 	);
-	let monthlySpend = 200000;
-	if (store === "SmartworksNoida Noida") monthlySpend = 150000;
-	else if (store === "Klj store") monthlySpend = 50000;
+	const targetStore = store || "All Stores";
+	const spendRows = await db`
+		SELECT monthly_spend 
+		FROM dim_marketing_spend 
+		WHERE store_display_name ILIKE ${`%${targetStore}%`} 
+		LIMIT 1
+	`;
+	const monthlySpend =
+		spendRows.length > 0 ? Number(spendRows[0].monthly_spend) : 0;
 	const spend = Math.round((monthlySpend / 30) * days);
 	const cac = spend / Math.max(1, newCount);
 

@@ -31,10 +31,16 @@ import {
 import { generateRootCauseRecommendation } from "@/lib/intelligence/recommendation-rules";
 import { buildRootCause } from "@/lib/intelligence/root-cause-engine";
 import { getStoreDiagnostics } from "@/lib/intelligence/store-diagnostics";
+import { getLatestTelemetryStatus } from "@/lib/repositories/odoo.repository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const responseCache = new Map<
+	string,
+	{ timestamp: number; lastSyncAt: string | null; payload: any }
+>();
 
 function getDefaultDateRange() {
 	const defaults = getDefaultPeriod();
@@ -66,6 +72,24 @@ export async function GET(req: NextRequest) {
 			compareEndDate: searchParams.get("compareEndDate") ?? undefined,
 		} satisfies DashboardFilters);
 		const periods = getComparisonPeriods(filters);
+
+		const telemetry = await getLatestTelemetryStatus();
+
+		const cacheKey = JSON.stringify({ filters, periods });
+		const now = Date.now();
+		const cached = responseCache.get(cacheKey);
+		if (
+			cached &&
+			now - cached.timestamp < 15000 &&
+			cached.lastSyncAt === telemetry.lastSyncAt
+		) {
+			return NextResponse.json(cached.payload, {
+				headers: {
+					"X-Dashboard-Cache": "HIT",
+					"X-Response-Time-Ms": (Date.now() - now).toString(),
+				},
+			});
+		}
 
 		let skuName: string | null = null;
 		if (filters.sku) {
@@ -208,7 +232,7 @@ export async function GET(req: NextRequest) {
 			};
 		});
 
-		return NextResponse.json({
+		const payload = {
 			success: true,
 			data: {
 				filters,
@@ -235,6 +259,20 @@ export async function GET(req: NextRequest) {
 				brandProfitability,
 				skuProfitability,
 				categoryProfitability,
+				freshness: telemetry,
+			},
+		};
+
+		responseCache.set(cacheKey, {
+			timestamp: Date.now(),
+			lastSyncAt: telemetry.lastSyncAt,
+			payload,
+		});
+
+		return NextResponse.json(payload, {
+			headers: {
+				"X-Dashboard-Cache": "MISS",
+				"X-Response-Time-Ms": (Date.now() - now).toString(),
 			},
 		});
 	} catch (error) {

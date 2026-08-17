@@ -233,9 +233,16 @@ async function syncStandardSales(
 		"write_date",
 	];
 
+	const LOOKBACK_MS = 10 * 60 * 1000; // 10-minute safety lookback window
+	const effectiveLastSync = lastSync
+		? new Date(
+				Math.max(0, new Date(lastSync).getTime() - LOOKBACK_MS),
+			).toISOString()
+		: null;
+
 	const domain: any[] = [["state", "in", ["sale", "done"]]];
-	if (lastSync) {
-		const formattedDate = formatDateTimeForOdoo(lastSync);
+	if (effectiveLastSync) {
+		const formattedDate = formatDateTimeForOdoo(effectiveLastSync);
 		domain.push(["write_date", ">=", formattedDate]);
 	}
 
@@ -376,10 +383,17 @@ async function syncPosSales(
 		"write_date",
 	];
 
-	// Sync closed/invoiced/paid orders
+	const LOOKBACK_MS = 10 * 60 * 1000; // 10-minute safety lookback window
+	const effectiveLastSync = lastSync
+		? new Date(
+				Math.max(0, new Date(lastSync).getTime() - LOOKBACK_MS),
+			).toISOString()
+		: null;
+
+	// Sync closed/invoiced/paid orders with 10-minute safety lookback window
 	const domain: any[] = [["state", "in", ["paid", "done", "invoiced"]]];
-	if (lastSync) {
-		const formattedDate = formatDateTimeForOdoo(lastSync);
+	if (effectiveLastSync) {
+		const formattedDate = formatDateTimeForOdoo(effectiveLastSync);
 		domain.push(["write_date", ">=", formattedDate]);
 	}
 

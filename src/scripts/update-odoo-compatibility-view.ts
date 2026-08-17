@@ -49,6 +49,11 @@ async function main() {
 				ELSE 'Head office'
 			END AS store_display_name
 		FROM sales_fact
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM fact_sales_orders fo
+			WHERE LOWER(TRIM(fo.name)) = LOWER(TRIM(sales_fact.bill_no))
+		)
 
 		UNION ALL
 
@@ -71,9 +76,16 @@ async function main() {
 			fl.qty::int AS quantity,
 			(COALESCE(dp.list_price, 0.00) * fl.qty)::numeric(12,2) AS mrp_amount,
 			((COALESCE(dp.list_price, 0.00) * fl.qty) - (fl.price_subtotal + COALESCE(fl.tax_amount, 0.00)))::numeric(12,2) AS discount_amount,
-			(fl.price_subtotal + COALESCE(fl.tax_amount, 0.00))::numeric(12,2) AS gross_amount,
+			(CASE 
+				WHEN fl.qty < 0 AND (fl.price_subtotal + COALESCE(fl.tax_amount, 0.00)) > 0 
+				THEN -(fl.price_subtotal + COALESCE(fl.tax_amount, 0.00))
+				ELSE (fl.price_subtotal + COALESCE(fl.tax_amount, 0.00))
+			END)::numeric(12,2) AS gross_amount,
 			COALESCE(fl.tax_amount, 0.00)::numeric(12,2) AS tax_amount,
-			fl.price_subtotal AS net_amount,
+			CASE 
+				WHEN fl.qty < 0 AND fl.price_subtotal > 0 THEN -fl.price_subtotal 
+				ELSE fl.price_subtotal 
+			END AS net_amount,
 			dc.mobile AS customer_mobile,
 			dc.name AS customer_name,
 			'Odoo POS' AS payment_method,
