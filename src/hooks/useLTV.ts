@@ -2,11 +2,15 @@ import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
 import { useFilterStore } from "@/stores/founder/filter-store";
 
 export function useLTV(hasData: boolean) {
-	const { startDate, endDate, store, categoryScope } = useFilterStore();
+	const { startDate, endDate, store, category, brand, sku, categoryScope } =
+		useFilterStore();
 
 	const fetcher = async (signal: AbortSignal) => {
 		const params = new URLSearchParams({ startDate, endDate });
 		if (store !== "ALL") params.set("store", store);
+		if (category !== "All Categories") params.set("category", category);
+		if (brand !== "All Brands") params.set("brand", brand);
+		if (sku) params.set("sku", sku);
 		if (categoryScope !== "all") params.set("categoryScope", categoryScope);
 
 		const res = await fetch(
@@ -23,7 +27,16 @@ export function useLTV(hasData: boolean) {
 	const { data, isInitialLoading } = useStabilizedDashboard({
 		fetcher,
 		enabled: hasData,
-		dependencies: [hasData, startDate, endDate, store, categoryScope],
+		dependencies: [
+			hasData,
+			startDate,
+			endDate,
+			store,
+			category,
+			brand,
+			sku,
+			categoryScope,
+		],
 	});
 
 	return { data, isLoading: !data && isInitialLoading };

@@ -1,7 +1,7 @@
 "use client";
 
-import { Filter, X } from "lucide-react";
-import { useEffect } from "react";
+import { Filter, Loader2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,6 +13,16 @@ import {
 } from "@/components/ui/select";
 import { DATE_PRESETS, getPresetRange } from "@/lib/date-presets";
 import { useFilterStore } from "@/stores/founder/filter-store";
+
+export interface ProductSuggestion {
+	id: number;
+	name: string;
+	sku: string | null;
+	barcode: string | null;
+	category: string | null;
+}
+
+const AUTOCOMPLETE_DEBOUNCE_MS = 250;
 
 export function formatStoreName(name: string): string {
 	if (name === "Klj store") return "KLJ";
@@ -33,6 +43,14 @@ interface GlobalFilterBarProps {
 	availableBrands: string[];
 	categoryBrandMap?: Record<string, string[]>;
 	skuName?: string | null;
+	/**
+	 * Opt-in product autocomplete. When provided, the search field becomes a
+	 * dropdown-driven autocomplete sourced from whatever this callback
+	 * resolves (e.g. the Inventory Dashboard's dim_products-backed search
+	 * endpoint). When omitted, the search field is the original plain text
+	 * input — every other consumer of this shared component is unaffected.
+	 */
+	onSearchProducts?: (query: string) => Promise<ProductSuggestion[]>;
 }
 
 export function GlobalFilterBar({
@@ -41,6 +59,7 @@ export function GlobalFilterBar({
 	availableBrands,
 	categoryBrandMap = {},
 	skuName,
+	onSearchProducts,
 }: GlobalFilterBarProps) {
 	const {
 		startDate,
@@ -66,6 +85,97 @@ export function GlobalFilterBar({
 		setCompareEndDate,
 		reset,
 	} = useFilterStore();
+
+	// Local text state for the autocomplete input — kept separate from the
+	// committed `sku` filter so typing doesn't refetch every dashboard section
+	// on every keystroke; only a selected suggestion (or blur-commit) updates
+	// the actual global filter.
+	const [searchText, setSearchText] = useState(sku);
+	const [suggestions, setSuggestions] = useState<ProductSuggestion[]>([]);
+	const [isSearching, setIsSearching] = useState(false);
+	const [isOpen, setIsOpen] = useState(false);
+	const [highlightedIndex, setHighlightedIndex] = useState(-1);
+	const searchContainerRef = useRef<HTMLDivElement>(null);
+	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	useEffect(() => {
+		setSearchText(sku);
+	}, [sku]);
+
+	useEffect(() => {
+		if (!onSearchProducts) return;
+		if (debounceRef.current) clearTimeout(debounceRef.current);
+
+		const query = searchText.trim();
+		if (query.length < 2) {
+			setSuggestions([]);
+			setIsOpen(false);
+			return;
+		}
+
+		debounceRef.current = setTimeout(async () => {
+			setIsSearching(true);
+			try {
+				const results = await onSearchProducts(query);
+				setSuggestions(results);
+				setIsOpen(true);
+				setHighlightedIndex(-1);
+			} catch {
+				setSuggestions([]);
+			} finally {
+				setIsSearching(false);
+			}
+		}, AUTOCOMPLETE_DEBOUNCE_MS);
+
+		return () => {
+			if (debounceRef.current) clearTimeout(debounceRef.current);
+		};
+	}, [searchText, onSearchProducts]);
+
+	// Close the dropdown on outside click.
+	useEffect(() => {
+		if (!onSearchProducts) return;
+		function handleClickOutside(e: MouseEvent) {
+			if (
+				searchContainerRef.current &&
+				!searchContainerRef.current.contains(e.target as Node)
+			) {
+				setIsOpen(false);
+			}
+		}
+		document.addEventListener("mousedown", handleClickOutside);
+		return () => document.removeEventListener("mousedown", handleClickOutside);
+	}, [onSearchProducts]);
+
+	function selectSuggestion(suggestion: ProductSuggestion) {
+		// Prefer the canonical Odoo identifier (default_code) when available;
+		// most products have no default_code synced, so fall back to the
+		// exact product name — still a precise, non-fuzzy match since it's
+		// the full name, not a fragment of what the user typed.
+		const filterValue = suggestion.sku || suggestion.name;
+		setSku(filterValue);
+		setSearchText(filterValue);
+		setIsOpen(false);
+		setSuggestions([]);
+		setHighlightedIndex(-1);
+	}
+
+	function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+		if (!isOpen || suggestions.length === 0) return;
+		if (e.key === "ArrowDown") {
+			e.preventDefault();
+			setHighlightedIndex((i) => Math.min(i + 1, suggestions.length - 1));
+		} else if (e.key === "ArrowUp") {
+			e.preventDefault();
+			setHighlightedIndex((i) => Math.max(i - 1, 0));
+		} else if (e.key === "Enter") {
+			e.preventDefault();
+			const target = suggestions[highlightedIndex] ?? suggestions[0];
+			if (target) selectSuggestion(target);
+		} else if (e.key === "Escape") {
+			setIsOpen(false);
+		}
+	}
 
 	// Reset selected brand if it is not valid for the newly selected category
 	useEffect(() => {
@@ -241,12 +351,73 @@ export function GlobalFilterBar({
 					</Select>
 
 					<div className="flex items-center gap-2 shrink-0">
-						<Input
-							placeholder="Search SKU or Name..."
-							value={sku}
-							onChange={(e) => setSku(e.target.value)}
-							className="h-9 w-[180px]"
-						/>
+						{onSearchProducts ? (
+							<div ref={searchContainerRef} className="relative">
+								<Input
+									placeholder="Search SKU or Name..."
+									value={searchText}
+									onChange={(e) => setSearchText(e.target.value)}
+									onFocus={() => {
+										if (suggestions.length > 0) setIsOpen(true);
+									}}
+									onKeyDown={handleSearchKeyDown}
+									className="h-9 w-[180px]"
+								/>
+								{isOpen && (
+									<div className="absolute top-full left-0 z-50 mt-1 w-[280px] rounded-md border bg-popover shadow-md">
+										{isSearching ? (
+											<div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+												<Loader2 className="size-3.5 animate-spin" />
+												Searching products...
+											</div>
+										) : suggestions.length === 0 ? (
+											<div className="px-3 py-2 text-xs text-muted-foreground">
+												No products found
+											</div>
+										) : (
+											<ul className="max-h-72 overflow-y-auto py-1">
+												{suggestions.map((s, i) => (
+													<li key={s.id}>
+														<button
+															type="button"
+															onClick={() => selectSuggestion(s)}
+															onMouseEnter={() => setHighlightedIndex(i)}
+															className={`w-full px-3 py-1.5 text-left text-xs ${
+																i === highlightedIndex
+																	? "bg-muted"
+																	: "hover:bg-muted/60"
+															}`}
+														>
+															<div className="font-medium truncate">
+																{s.name}
+															</div>
+															<div className="text-muted-foreground truncate">
+																{s.sku
+																	? s.sku
+																	: s.barcode
+																		? `Barcode: ${s.barcode}`
+																		: null}
+																{(s.sku || s.barcode) && s.category
+																	? " • "
+																	: ""}
+																{s.category}
+															</div>
+														</button>
+													</li>
+												))}
+											</ul>
+										)}
+									</div>
+								)}
+							</div>
+						) : (
+							<Input
+								placeholder="Search SKU or Name..."
+								value={sku}
+								onChange={(e) => setSku(e.target.value)}
+								className="h-9 w-[180px]"
+							/>
+						)}
 						{sku && skuName && (
 							<span
 								className="text-xs font-bold text-foreground bg-muted border px-2.5 py-1 rounded max-w-[220px] truncate"

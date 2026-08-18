@@ -14,9 +14,21 @@ export async function GET(req: NextRequest) {
 		const params = req.nextUrl.searchParams;
 		const startDate = params.get("startDate");
 		const endDate = params.get("endDate");
-		const store = params.get("store") || null;
-		const brand = params.get("brand") || null;
-		const category = params.get("category") || null;
+		const rawStore = params.get("store");
+		const rawBrand = params.get("brand");
+		const rawCategory = params.get("category");
+		const store =
+			rawStore && rawStore !== "All Stores" && rawStore !== "all"
+				? rawStore
+				: null;
+		const brand =
+			rawBrand && rawBrand !== "All Brands" && rawBrand !== "all"
+				? rawBrand
+				: null;
+		const category =
+			rawCategory && rawCategory !== "All Categories" && rawCategory !== "all"
+				? rawCategory
+				: null;
 		const sku = params.get("sku") || null;
 
 		// Check if net_purchase_fact_v exists in the database

@@ -147,6 +147,8 @@ function DiagnosisBadge({ type }: { type: string }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
+import { useFilterStore } from "@/stores/founder/filter-store";
+
 export default function Page({
 	params,
 }: {
@@ -156,6 +158,8 @@ export default function Page({
 	// billedBy values use real spaces (encoded as %20), NOT underscores
 	const rawStoreName = decodeURIComponent(storeId);
 	const storeName = rawStoreName.replace(/\b\w/g, (c) => c.toUpperCase());
+
+	const { startDate, endDate, store, category, brand, sku } = useFilterStore();
 
 	const [storeData, setStoreData] = React.useState<StoreData | null>(null);
 	const [context, setContext] = React.useState<
@@ -174,7 +178,18 @@ export default function Page({
 			try {
 				// Decode the URL param — billedBy uses real spaces encoded as %20
 				const rawStore = decodeURIComponent(storeId).trim();
-				const res = await fetch(`/api/sales/store-overview`);
+				const queryParams = new URLSearchParams();
+				if (startDate) queryParams.set("startDate", startDate);
+				if (endDate) queryParams.set("endDate", endDate);
+				if (store !== "ALL") queryParams.set("store", store);
+				if (category !== "All Categories")
+					queryParams.set("category", category);
+				if (brand !== "All Brands") queryParams.set("brand", brand);
+				if (sku) queryParams.set("sku", sku);
+
+				const res = await fetch(
+					`/api/sales/store-overview?${queryParams.toString()}`,
+				);
 				if (!res.ok) throw new Error(`API error ${res.status}`);
 				const json: ApiResponse = await res.json();
 				if (!json.success) throw new Error("API returned failure");
@@ -202,7 +217,7 @@ export default function Page({
 			}
 		}
 		load();
-	}, [storeId]);
+	}, [storeId, startDate, endDate, store, category, brand, sku]);
 
 	return (
 		<div className="flex flex-col gap-6 p-4 md:p-8 pt-4">

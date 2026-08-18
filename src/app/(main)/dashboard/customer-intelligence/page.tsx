@@ -25,6 +25,7 @@ import type { CustomerIntelligenceResponse } from "@/types/customer-intelligence
 
 interface StatusData {
 	hasData: boolean;
+	availableStores?: string[];
 	availableCategories?: string[];
 	availableBrands?: string[];
 }
@@ -197,8 +198,9 @@ export default function Page() {
 				</div>
 
 				<GlobalFilterBar
-					availableCategories={status.availableCategories || []}
-					availableBrands={status.availableBrands || []}
+					availableStores={status?.availableStores || []}
+					availableCategories={status?.availableCategories || []}
+					availableBrands={status?.availableBrands || []}
 				/>
 
 				{!data ? (

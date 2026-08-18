@@ -52,8 +52,23 @@ export async function GET() {
         LIMIT 1
       `,
 			sql`SELECT DISTINCT billed_by FROM sales_fact_v ORDER BY billed_by`,
-			sql`SELECT DISTINCT category FROM sales_fact_v WHERE category IS NOT NULL AND category <> '' ORDER BY category`,
-			sql`SELECT DISTINCT brand FROM sales_fact_v WHERE brand IS NOT NULL AND brand <> '' ORDER BY brand`,
+			// Legacy Excel rows and Odoo-synced rows record category/brand text
+			// independently, so the same logical value can arrive with different
+			// casing/whitespace (e.g. "BEVERAGES" vs "Beverages") — DISTINCT ON
+			// a normalized key collapses those to one canonical option per real
+			// category, instead of surfacing every raw formatting variant.
+			sql`
+        SELECT DISTINCT ON (LOWER(TRIM(category))) category
+        FROM sales_fact_v
+        WHERE category IS NOT NULL AND category <> ''
+        ORDER BY LOWER(TRIM(category)), category
+      `,
+			sql`
+        SELECT DISTINCT ON (LOWER(TRIM(brand))) brand
+        FROM sales_fact_v
+        WHERE brand IS NOT NULL AND brand <> ''
+        ORDER BY LOWER(TRIM(brand)), brand
+      `,
 			sql`SELECT latest_sale_date::text, days_stale, total_bills, total_revenue, last_upload_at::text FROM data_freshness`,
 			sql`SELECT DISTINCT category, brand FROM sales_fact_v WHERE category IS NOT NULL AND category <> '' AND brand IS NOT NULL AND brand <> '' ORDER BY category, brand`,
 		]);
@@ -61,16 +76,38 @@ export async function GET() {
 		const stats = statsResult[0] ?? {};
 		const totalRows = Number(stats.total_rows ?? 0);
 
-		const categoryBrandMap = (categoryBrandMapResult || []).reduce(
-			(acc: Record<string, string[]>, row: any) => {
-				const cat = row.category;
-				const brnd = row.brand;
-				if (!acc[cat]) acc[cat] = [];
-				acc[cat].push(brnd);
-				return acc;
-			},
-			{},
-		);
+		// Normalize the same way as the categoriesResult/brandsResult queries
+		// above: group by a case/whitespace-insensitive key so "BEVERAGES" and
+		// "Beverages" rows merge into one entry, keyed by whichever raw variant
+		// sorts first alphabetically (matching the DISTINCT ON canonical pick),
+		// with brand values deduped the same way within each category.
+		const canonicalLabel = new Map<string, string>();
+		const categoryBrandSets = new Map<string, Map<string, string>>();
+		for (const row of categoryBrandMapResult || []) {
+			const rawCat = String(row.category ?? "");
+			const rawBrand = String(row.brand ?? "");
+			const catKey = rawCat.trim().toLowerCase();
+			const brandKey = rawBrand.trim().toLowerCase();
+			if (!catKey || !brandKey) continue;
+
+			const existingCatLabel = canonicalLabel.get(catKey);
+			if (!existingCatLabel || rawCat < existingCatLabel) {
+				canonicalLabel.set(catKey, rawCat);
+			}
+
+			if (!categoryBrandSets.has(catKey))
+				categoryBrandSets.set(catKey, new Map());
+			const brandsForCat = categoryBrandSets.get(catKey)!;
+			const existingBrandLabel = brandsForCat.get(brandKey);
+			if (!existingBrandLabel || rawBrand < existingBrandLabel) {
+				brandsForCat.set(brandKey, rawBrand);
+			}
+		}
+		const categoryBrandMap: Record<string, string[]> = {};
+		for (const [catKey, brandsForCat] of categoryBrandSets) {
+			const label = canonicalLabel.get(catKey)!;
+			categoryBrandMap[label] = Array.from(brandsForCat.values()).sort();
+		}
 
 		return NextResponse.json({
 			success: true,

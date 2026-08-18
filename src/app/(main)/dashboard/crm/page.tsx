@@ -218,8 +218,9 @@ export default function Page() {
 			</div>
 
 			<GlobalFilterBar
-				availableCategories={status.availableCategories || []}
-				availableBrands={status.availableBrands || []}
+				availableStores={status?.availableStores || []}
+				availableCategories={status?.availableCategories || []}
+				availableBrands={status?.availableBrands || []}
 			/>
 
 			{!data && isInitialLoading ? (

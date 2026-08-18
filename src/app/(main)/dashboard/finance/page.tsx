@@ -11,6 +11,8 @@ import {
 	TrendingUp,
 	Wallet,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { GlobalFilterBar } from "@/components/founder/global-filter-bar";
 import { PipelineStatusBanner } from "@/components/founder/pipeline-status-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,10 +35,37 @@ import {
 } from "@/components/ui/table";
 import { useStabilizedDashboard } from "@/hooks/use-stabilized-dashboard";
 import { formatCurrency } from "@/lib/utils";
+import { useFilterStore } from "@/stores/founder/filter-store";
 
 export default function FinancePage() {
+	const [status, setStatus] = useState<any>(null);
+	const { startDate, endDate, store, category, brand, sku } = useFilterStore();
+
+	useEffect(() => {
+		const fetchStatus = async () => {
+			try {
+				const res = await fetch("/api/sales/status");
+				const json = await res.json();
+				if (json.success) setStatus(json.data);
+			} catch (err) {
+				console.error("Failed to fetch status", err);
+			}
+		};
+		fetchStatus();
+	}, []);
+
 	const fetcher = async (signal: AbortSignal) => {
-		const res = await fetch("/api/finance/summary", { signal });
+		const params = new URLSearchParams();
+		if (startDate) params.set("startDate", startDate);
+		if (endDate) params.set("endDate", endDate);
+		if (store !== "ALL") params.set("store", store);
+		if (category !== "All Categories") params.set("category", category);
+		if (brand !== "All Brands") params.set("brand", brand);
+		if (sku) params.set("sku", sku);
+
+		const res = await fetch(`/api/finance/summary?${params.toString()}`, {
+			signal,
+		});
 		const json = await res.json();
 		if (json.success) {
 			return json.data;
@@ -46,6 +75,7 @@ export default function FinancePage() {
 
 	const { data, isInitialLoading, refetch } = useStabilizedDashboard({
 		fetcher,
+		dependencies: [startDate, endDate, store, category, brand, sku],
 	});
 
 	const formattedDate = format(new Date(), "EEEE, do MMMM yyyy");
@@ -95,6 +125,13 @@ export default function FinancePage() {
 					</Button>
 				</div>
 			</div>
+
+			<GlobalFilterBar
+				availableStores={status?.availableStores || []}
+				availableCategories={status?.availableCategories || []}
+				availableBrands={status?.availableBrands || []}
+				categoryBrandMap={status?.categoryBrandMap || {}}
+			/>
 
 			{/* Financial KPI Cards */}
 			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

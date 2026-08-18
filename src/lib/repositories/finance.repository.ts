@@ -31,12 +31,34 @@ export interface FinanceSummary {
 	}>;
 }
 
-export async function getFinanceSummary(): Promise<FinanceSummary> {
+export async function getFinanceSummary(filters?: {
+	store?: string;
+	category?: string;
+	brand?: string;
+	startDate?: string;
+	endDate?: string;
+}): Promise<FinanceSummary> {
 	try {
-		// Calculate sales revenue from sales_fact_v
+		const storeFilter =
+			filters?.store && filters.store !== "All Stores" ? filters.store : null;
+		const categoryFilter =
+			filters?.category && filters.category !== "All Categories"
+				? filters.category
+				: null;
+		const brandFilter =
+			filters?.brand && filters.brand !== "All Brands" ? filters.brand : null;
+		const startDate = filters?.startDate || null;
+		const endDate = filters?.endDate || null;
+
+		// Calculate sales revenue from sales_fact_v with global filters
 		const salesRes = await sql`
 			SELECT COALESCE(SUM(net_amount), 0)::FLOAT AS "totalRevenue"
-			FROM sales_fact_v;
+			FROM sales_fact_v
+			WHERE (${storeFilter}::TEXT IS NULL OR store_display_name = ${storeFilter})
+			  AND (${categoryFilter}::TEXT IS NULL OR category = ${categoryFilter})
+			  AND (${brandFilter}::TEXT IS NULL OR brand = ${brandFilter})
+			  AND (${startDate}::DATE IS NULL OR sale_date >= ${startDate}::DATE)
+			  AND (${endDate}::DATE IS NULL OR sale_date <= ${endDate}::DATE);
 		`;
 
 		const totalRevenue = Number(salesRes[0]?.totalRevenue || 0);

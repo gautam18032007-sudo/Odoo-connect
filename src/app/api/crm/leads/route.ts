@@ -9,7 +9,11 @@ export async function GET(req: NextRequest) {
 	try {
 		const searchParams = req.nextUrl.searchParams;
 		const stage = searchParams.get("stage") || undefined;
-		const store = searchParams.get("store") || undefined;
+		const rawStore = searchParams.get("store");
+		const store =
+			rawStore && rawStore !== "All Stores" && rawStore !== "all"
+				? rawStore
+				: undefined;
 		const search = searchParams.get("search") || undefined;
 
 		const leads = await getCrmLeads({ stage, store, search });

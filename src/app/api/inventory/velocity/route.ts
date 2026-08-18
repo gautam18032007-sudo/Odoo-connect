@@ -25,6 +25,9 @@ export async function GET(request: NextRequest) {
 		) as ItemVelocityPagedParams["sortDir"];
 
 		const search = searchParams.get("search") || undefined;
+		const store = searchParams.get("store") || undefined;
+		const category = searchParams.get("category") || undefined;
+		const brand = searchParams.get("brand") || undefined;
 
 		const result = await getItemVelocityPaged({
 			page,
@@ -32,6 +35,11 @@ export async function GET(request: NextRequest) {
 			sortBy,
 			sortDir,
 			search,
+			store:
+				store && store !== "ALL" && store !== "All Stores" ? store : undefined,
+			category:
+				category && category !== "All Categories" ? category : undefined,
+			brand: brand && brand !== "All Brands" ? brand : undefined,
 		});
 
 		return NextResponse.json({ success: true, data: result });
