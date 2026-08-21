@@ -20,6 +20,9 @@ export async function GET(req: NextRequest) {
 			startDate: searchParams.get("startDate") ?? defaults.startDate,
 			endDate: searchParams.get("endDate") ?? defaults.endDate,
 			store: searchParams.get("store") ?? undefined,
+			category: searchParams.get("category") ?? undefined,
+			brand: searchParams.get("brand") ?? undefined,
+			sku: searchParams.get("sku") ?? undefined,
 			categoryScope:
 				(searchParams.get(
 					"categoryScope",

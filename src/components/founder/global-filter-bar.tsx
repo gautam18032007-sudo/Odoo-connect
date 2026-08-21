@@ -51,6 +51,20 @@ interface GlobalFilterBarProps {
 	 * input — every other consumer of this shared component is unaffected.
 	 */
 	onSearchProducts?: (query: string) => Promise<ProductSuggestion[]>;
+	/**
+	 * Opt-in "All Time" support for the Analysis Period preset dropdown.
+	 * The real min/max sale_date across all synced data (e.g. from
+	 * /api/sales/status), never hardcoded. When omitted, selecting "All
+	 * Time" is a safe no-op — every other consumer is unaffected.
+	 */
+	dataBounds?: { minDate: string; maxDate: string } | null;
+	/**
+	 * Opt-in SKU-search disable. When set, the SKU/Name search field is
+	 * rendered disabled with this string shown as the explanation (e.g.
+	 * because the active tab's metric has no per-product SKU scoping).
+	 * Omitted by every other consumer — zero behavior change elsewhere.
+	 */
+	skuDisabledReason?: string;
 }
 
 export function GlobalFilterBar({
@@ -60,6 +74,8 @@ export function GlobalFilterBar({
 	categoryBrandMap = {},
 	skuName,
 	onSearchProducts,
+	dataBounds,
+	skuDisabledReason,
 }: GlobalFilterBarProps) {
 	const {
 		startDate,
@@ -223,6 +239,14 @@ export function GlobalFilterBar({
 						</span>
 						<Select
 							onValueChange={(value) => {
+								if (value === "allTime") {
+									// Real min/max sale_date from the caller's own data,
+									// never hardcoded. No-op if the caller didn't wire it.
+									if (dataBounds) {
+										setDateRange(dataBounds.minDate, dataBounds.maxDate);
+									}
+									return;
+								}
 								const range = getPresetRange(value);
 								// "custom" returns null — leaves startDate/endDate untouched, use the date inputs below.
 								if (range) setDateRange(range.startDate, range.endDate);
@@ -351,7 +375,14 @@ export function GlobalFilterBar({
 					</Select>
 
 					<div className="flex items-center gap-2 shrink-0">
-						{onSearchProducts ? (
+						{skuDisabledReason ? (
+							<Input
+								placeholder="Not available for this view"
+								disabled
+								title={skuDisabledReason}
+								className="h-9 w-[180px]"
+							/>
+						) : onSearchProducts ? (
 							<div ref={searchContainerRef} className="relative">
 								<Input
 									placeholder="Search SKU or Name..."

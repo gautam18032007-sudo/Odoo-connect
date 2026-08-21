@@ -21,7 +21,11 @@ export async function getCohortMetrics(
 	},
 ) {
 	const food = retailFilter(filters);
+	const endDate = filters.endDate ?? null;
+	const startDate = filters.startDate ?? null;
 	const store = filters.store ?? null;
+	const category = filters.category ?? null;
+	const brand = filters.brand ?? null;
 	const customerType = filters.customerType ?? "all";
 	const billRange = filters.billRange ?? "all";
 
@@ -34,8 +38,11 @@ export async function getCohortMetrics(
         COUNT(DISTINCT bill_no) AS total_orders
       FROM sales_fact_v
       WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
-        AND ($1::text IS NULL OR billed_by = $1)
-        AND ($2::text[] IS NULL OR category <> ALL($2::text[]))
+        AND ($1::date IS NULL OR sale_date <= $1::date)
+        AND ($2::text IS NULL OR billed_by = $2)
+        AND ($3::text[] IS NULL OR category <> ALL($3::text[]))
+        AND ($4::text IS NULL OR category = $4)
+        AND ($5::text IS NULL OR brand = $5)
       GROUP BY (${CUSTOMER_IDENTITY_KEY_SQL})
     ),
     first_bill_amounts AS (
@@ -45,6 +52,8 @@ export async function getCohortMetrics(
         SUM(sf.net_amount) AS first_bill_amount
       FROM customer_first_bill fb
       JOIN sales_fact_v sf ON (${CUSTOMER_IDENTITY_KEY_SQL}) = fb.customer_key AND fb.first_bill_no = sf.bill_no
+      WHERE ($4::text IS NULL OR sf.category = $4)
+        AND ($5::text IS NULL OR sf.brand = $5)
       GROUP BY fb.customer_key, fb.total_orders
     ),
     customer_cohort AS (
@@ -54,19 +63,25 @@ export async function getCohortMetrics(
       FROM first_bill_amounts fba
       JOIN customer_first_bill fb ON fba.customer_key = fb.customer_key
       WHERE (
-        $3::text = 'all'
-        OR ($3::text = 'new' AND (fba.total_orders = 1 OR (CURRENT_DATE - fb.first_date) <= 30))
-        OR ($3::text = 'existing' AND (fba.total_orders > 1 OR (CURRENT_DATE - fb.first_date) > 30))
+        $6::text = 'all'
+        OR ($6::text = 'new' AND (fba.total_orders = 1 OR ($1::date IS NOT NULL AND ($1::date - fb.first_date) <= 30)))
+        OR ($6::text = 'existing' AND (fba.total_orders > 1 OR ($1::date IS NOT NULL AND ($1::date - fb.first_date) > 30)))
       )
       AND (
-        $4::text = 'all'
-        OR ($4::text = '0-500' AND fba.first_bill_amount <= 500)
-        OR ($4::text = '500-1000' AND fba.first_bill_amount > 500 AND fba.first_bill_amount <= 1000)
-        OR ($4::text = '1000-2000' AND fba.first_bill_amount > 1000 AND fba.first_bill_amount <= 2000)
-        OR ($4::text = '2000-5000' AND fba.first_bill_amount > 2000 AND fba.first_bill_amount <= 5000)
-        OR ($4::text = '5000+' AND fba.first_bill_amount > 5000)
+        $7::text = 'all'
+        OR ($7::text = '0-500' AND fba.first_bill_amount <= 500)
+        OR ($7::text = '500-1000' AND fba.first_bill_amount > 500 AND fba.first_bill_amount <= 1000)
+        OR ($7::text = '1000-2000' AND fba.first_bill_amount > 1000 AND fba.first_bill_amount <= 2000)
+        OR ($7::text = '2000-5000' AND fba.first_bill_amount > 2000 AND fba.first_bill_amount <= 5000)
+        OR ($7::text = '5000+' AND fba.first_bill_amount > 5000)
       )
     ),
+    -- Two distinct date concepts, deliberately not the same filter:
+    -- cohort identity (customer_first_bill/customer_cohort above) is
+    -- purely as-of endDate — a customer's historical acquisition month
+    -- must never move when startDate changes. Activity (this CTE) is the
+    -- opposite: it's what actually happened inside the selected window,
+    -- so it respects both startDate and endDate as a real lower/upper bound.
     customer_activity AS (
       SELECT
         (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
@@ -76,8 +91,12 @@ export async function getCohortMetrics(
         SUM(sf.quantity) AS units
       FROM sales_fact_v sf
       WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
-        AND ($1::text IS NULL OR sf.billed_by = $1)
-        AND ($2::text[] IS NULL OR sf.category <> ALL($2::text[]))
+        AND ($1::date IS NULL OR sf.sale_date <= $1::date)
+        AND ($8::date IS NULL OR sf.sale_date >= $8::date)
+        AND ($2::text IS NULL OR sf.billed_by = $2)
+        AND ($3::text[] IS NULL OR sf.category <> ALL($3::text[]))
+        AND ($4::text IS NULL OR sf.category = $4)
+        AND ($5::text IS NULL OR sf.brand = $5)
       GROUP BY (${CUSTOMER_IDENTITY_KEY_SQL}), activity_month
     ),
     cohort_size AS (
@@ -96,18 +115,22 @@ export async function getCohortMetrics(
       SUM(ca.bills)::integer AS bills,
       SUM(ca.units)::integer AS units
     FROM customer_cohort cc
-    JOIN customer_activity ca ON cc.customer_key = ca.customer_key
+    LEFT JOIN customer_activity ca
+      ON cc.customer_key = ca.customer_key AND ca.activity_month >= cc.cohort_month
     JOIN cohort_size cs ON cc.cohort_month = cs.cohort_month
-    WHERE ca.activity_month >= cc.cohort_month
     GROUP BY cc.cohort_month, cs.cohort_customers, month_index
     ORDER BY cc.cohort_month ASC, month_index ASC
   `;
 
 	const rows = await (db as any).query(query, [
+		endDate,
 		store,
 		food,
+		category,
+		brand,
 		customerType,
 		billRange,
+		startDate,
 	]);
 
 	const cohortsMap: Record<
@@ -207,7 +230,10 @@ export async function getBillCutCohorts(
 	filters: DashboardFilters,
 ) {
 	const food = retailFilter(filters);
+	const endDate = filters.endDate ?? null;
 	const store = filters.store ?? null;
+	const category = filters.category ?? null;
+	const brand = filters.brand ?? null;
 
 	const query = `
     WITH customer_first_bill AS (
@@ -218,8 +244,11 @@ export async function getBillCutCohorts(
         COUNT(DISTINCT bill_no) AS total_orders
       FROM sales_fact_v
       WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
-        AND ($1::text IS NULL OR billed_by = $1)
-        AND ($2::text[] IS NULL OR category <> ALL($2::text[]))
+        AND ($1::date IS NULL OR sale_date <= $1::date)
+        AND ($2::text IS NULL OR billed_by = $2)
+        AND ($3::text[] IS NULL OR category <> ALL($3::text[]))
+        AND ($4::text IS NULL OR category = $4)
+        AND ($5::text IS NULL OR brand = $5)
       GROUP BY (${CUSTOMER_IDENTITY_KEY_SQL})
     ),
     first_bill_amounts AS (
@@ -229,6 +258,8 @@ export async function getBillCutCohorts(
         SUM(sf.net_amount) AS first_bill_amount
       FROM customer_first_bill fb
       JOIN sales_fact_v sf ON (${CUSTOMER_IDENTITY_KEY_SQL}) = fb.customer_key AND fb.first_bill_no = sf.bill_no
+      WHERE ($4::text IS NULL OR sf.category = $4)
+        AND ($5::text IS NULL OR sf.brand = $5)
       GROUP BY fb.customer_key, fb.total_orders
     ),
     customer_bill_cut AS (
@@ -256,7 +287,13 @@ export async function getBillCutCohorts(
     ORDER BY min_amt ASC
   `;
 
-	const rows = await (db as any).query(query, [store, food]);
+	const rows = await (db as any).query(query, [
+		endDate,
+		store,
+		food,
+		category,
+		brand,
+	]);
 	return rows.map((row: any) => ({
 		billRange: row.billRange,
 		totalCustomers: n(row.totalCustomers),
