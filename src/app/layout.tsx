@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
 import { AuthProvider } from "@/components/providers/auth-provider";
@@ -13,6 +13,13 @@ import { PreferencesStoreProvider } from "@/stores/preferences/preferences-provi
 import { SettingsProvider } from "@/stores/settings/settings-provider";
 
 import "./globals.css";
+
+export const viewport: Viewport = {
+	width: "device-width",
+	initialScale: 1,
+	maximumScale: 5,
+	viewportFit: "cover",
+};
 
 const metadataBase = new URL(
 	process.env.NEXT_PUBLIC_APP_URL ??

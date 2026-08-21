@@ -233,26 +233,23 @@ export function GlobalFilterBar({
 					</div>
 
 					{/* Analysis Period Box */}
-					<div className="flex items-center gap-2 border bg-muted/20 p-1 px-3 rounded-lg text-sm">
+					<div className="flex flex-wrap items-center gap-2 border bg-muted/20 p-1 px-3 rounded-lg text-sm max-w-full">
 						<span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 border-r pr-2 mr-1">
 							Analysis Period
 						</span>
 						<Select
 							onValueChange={(value) => {
 								if (value === "allTime") {
-									// Real min/max sale_date from the caller's own data,
-									// never hardcoded. No-op if the caller didn't wire it.
 									if (dataBounds) {
 										setDateRange(dataBounds.minDate, dataBounds.maxDate);
 									}
 									return;
 								}
 								const range = getPresetRange(value);
-								// "custom" returns null — leaves startDate/endDate untouched, use the date inputs below.
 								if (range) setDateRange(range.startDate, range.endDate);
 							}}
 						>
-							<SelectTrigger className="h-7 w-[130px] border-0 bg-transparent p-0 shadow-none focus:ring-0 text-xs">
+							<SelectTrigger className="h-7 w-[120px] sm:w-[130px] border-0 bg-transparent p-0 shadow-none focus:ring-0 text-xs">
 								<SelectValue placeholder="Quick range" />
 							</SelectTrigger>
 							<SelectContent>
@@ -267,19 +264,19 @@ export function GlobalFilterBar({
 							type="date"
 							value={startDate}
 							onChange={(e) => setStartDate(e.target.value)}
-							className="h-7 w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
+							className="h-7 w-[110px] sm:w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
 						/>
 						<span className="text-muted-foreground text-xs shrink-0">→</span>
 						<Input
 							type="date"
 							value={endDate}
 							onChange={(e) => setEndDate(e.target.value)}
-							className="h-7 w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
+							className="h-7 w-[110px] sm:w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
 						/>
 					</div>
 
 					{/* Compare Against Box */}
-					<div className="flex items-center gap-2 border bg-muted/20 p-1 px-3 rounded-lg text-sm">
+					<div className="flex flex-wrap items-center gap-2 border bg-muted/20 p-1 px-3 rounded-lg text-sm max-w-full">
 						<span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 border-r pr-2 mr-1">
 							Compare Against
 						</span>
@@ -287,7 +284,7 @@ export function GlobalFilterBar({
 							value={compareMode}
 							onValueChange={(v) => setCompareMode(v as "mirror" | "custom")}
 						>
-							<SelectTrigger className="h-7 w-[150px] border-0 bg-transparent p-0 shadow-none focus:ring-0 text-xs">
+							<SelectTrigger className="h-7 w-[130px] sm:w-[150px] border-0 bg-transparent p-0 shadow-none focus:ring-0 text-xs">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
@@ -301,7 +298,7 @@ export function GlobalFilterBar({
 									type="date"
 									value={compareStartDate}
 									onChange={(e) => setCompareStartDate(e.target.value)}
-									className="h-7 w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
+									className="h-7 w-[110px] sm:w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
 								/>
 								<span className="text-muted-foreground text-xs shrink-0">
 									→
@@ -310,7 +307,7 @@ export function GlobalFilterBar({
 									type="date"
 									value={compareEndDate}
 									onChange={(e) => setCompareEndDate(e.target.value)}
-									className="h-7 w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
+									className="h-7 w-[110px] sm:w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
 								/>
 							</>
 						)}
@@ -318,9 +315,9 @@ export function GlobalFilterBar({
 				</div>
 
 				{/* Row 2: Dimension Filters */}
-				<div className="flex flex-wrap items-center gap-3 border-t pt-3">
+				<div className="flex flex-wrap items-center gap-2.5 sm:gap-3 border-t pt-3">
 					<Select value={store} onValueChange={setStore}>
-						<SelectTrigger className="h-9 w-[150px]">
+						<SelectTrigger className="h-9 w-full sm:w-[150px]">
 							<SelectValue placeholder="Store" />
 						</SelectTrigger>
 						<SelectContent>
@@ -337,7 +334,7 @@ export function GlobalFilterBar({
 						value={categoryScope}
 						onValueChange={(v) => setCategoryScope(v as "all" | "retail")}
 					>
-						<SelectTrigger className="h-9 w-[130px]">
+						<SelectTrigger className="h-9 w-full sm:w-[130px]">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -347,7 +344,7 @@ export function GlobalFilterBar({
 					</Select>
 
 					<Select value={category} onValueChange={setCategory}>
-						<SelectTrigger className="h-9 w-[150px]">
+						<SelectTrigger className="h-9 w-full sm:w-[150px]">
 							<SelectValue placeholder="Category" />
 						</SelectTrigger>
 						<SelectContent>
@@ -361,7 +358,7 @@ export function GlobalFilterBar({
 					</Select>
 
 					<Select value={brand} onValueChange={setBrand}>
-						<SelectTrigger className="h-9 w-[150px]">
+						<SelectTrigger className="h-9 w-full sm:w-[150px]">
 							<SelectValue placeholder="Brand" />
 						</SelectTrigger>
 						<SelectContent>
@@ -374,13 +371,13 @@ export function GlobalFilterBar({
 						</SelectContent>
 					</Select>
 
-					<div className="flex items-center gap-2 shrink-0">
+					<div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
 						{skuDisabledReason ? (
 							<Input
 								placeholder="Not available for this view"
 								disabled
 								title={skuDisabledReason}
-								className="h-9 w-[180px]"
+								className="h-9 w-full sm:w-[180px]"
 							/>
 						) : onSearchProducts ? (
 							<div ref={searchContainerRef} className="relative">
