@@ -105,6 +105,16 @@ function RetentionDashboardContent() {
 				availableCategories={status.availableCategories || []}
 				availableBrands={status.availableBrands || []}
 				categoryBrandMap={status.categoryBrandMap || {}}
+				dataBounds={
+					status.minDate && status.maxDate
+						? { minDate: status.minDate, maxDate: status.maxDate }
+						: null
+				}
+				skuDisabledReason={
+					activeTab === "cohorts"
+						? "SKU-level filtering isn't supported for Cohort Analysis — cohorts are defined by a customer's first purchase across all products, not a single SKU."
+						: undefined
+				}
 			/>
 
 			{/* Main Tabs Navigation */}

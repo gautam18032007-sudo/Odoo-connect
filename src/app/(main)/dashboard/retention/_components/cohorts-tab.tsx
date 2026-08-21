@@ -45,7 +45,10 @@ export function CohortsTab({ hasData }: { hasData: boolean }) {
 	const [customerType, setCustomerType] = useState<string>("all");
 	const [billRangeFilter, setBillRangeFilter] = useState<string>("all");
 
-	const { startDate, endDate, store, categoryScope } = useFilterStore();
+	// sku intentionally excluded: SKU-level filtering isn't supported for
+	// Cohort Analysis — see GlobalFilterBar's skuDisabledReason on this tab.
+	const { startDate, endDate, store, category, brand, categoryScope } =
+		useFilterStore();
 	const [dataPayload, setDataPayload] = useState<any>(null);
 	const [isLoading, setIsLoading] = useState(true);
 
@@ -62,6 +65,9 @@ export function CohortsTab({ hasData }: { hasData: boolean }) {
 					billRange: billRangeFilter,
 				});
 				if (store !== "ALL") params.set("store", store);
+				if (category && category !== "All Categories")
+					params.set("category", category);
+				if (brand && brand !== "All Brands") params.set("brand", brand);
 				if (categoryScope !== "all") params.set("categoryScope", categoryScope);
 
 				const res = await fetch(
@@ -84,6 +90,8 @@ export function CohortsTab({ hasData }: { hasData: boolean }) {
 		startDate,
 		endDate,
 		store,
+		category,
+		brand,
 		categoryScope,
 		customerType,
 		billRangeFilter,

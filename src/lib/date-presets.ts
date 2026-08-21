@@ -8,6 +8,7 @@ export const DATE_PRESETS = [
 	{ value: "thisQuarter", label: "This Quarter" },
 	{ value: "lastQuarter", label: "Last Quarter" },
 	{ value: "thisYear", label: "This Year" },
+	{ value: "allTime", label: "All Time" },
 	{ value: "custom", label: "Custom Date Range" },
 ] as const;
 
