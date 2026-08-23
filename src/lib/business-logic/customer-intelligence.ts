@@ -48,6 +48,7 @@ export async function getCustomerIntelligence(
 				AND ($4::text IS NULL OR category = $4)
 				AND ($5::text IS NULL OR brand = $5)
 				AND ($6::text[] IS NULL OR category <> ALL($6::text[]))
+				AND ($7::text IS NULL OR (sku_code ILIKE '%' || $7 || '%' OR item_name ILIKE '%' || $7 || '%'))
 			GROUP BY customer_mobile
 		)
 		SELECT
@@ -71,8 +72,9 @@ export async function getCustomerIntelligence(
 			AND customer_mobile <> ''
 			AND ($3::text IS NULL OR billed_by = $3)
 			AND ($4::text[] IS NULL OR category <> ALL($4::text[]))
-		GROUP BY customer_mobile 
-		ORDER BY revenue DESC 
+			AND ($6::text IS NULL OR (sku_code ILIKE '%' || $6 || '%' OR item_name ILIKE '%' || $6 || '%'))
+		GROUP BY customer_mobile
+		ORDER BY revenue DESC
 		LIMIT $5::int
 	`;
 
@@ -84,6 +86,7 @@ export async function getCustomerIntelligence(
 			filters.category ?? null,
 			filters.brand ?? null,
 			food ?? null,
+			filters.sku ?? null,
 		]),
 		(db as any).query(aggregatedCustomerQuery, [
 			periods.previousStart,
@@ -92,6 +95,7 @@ export async function getCustomerIntelligence(
 			filters.category ?? null,
 			filters.brand ?? null,
 			food ?? null,
+			filters.sku ?? null,
 		]),
 		(db as any).query(topCustomersQuery, [
 			periods.currentStart,
@@ -99,6 +103,7 @@ export async function getCustomerIntelligence(
 			filters.store ?? null,
 			food ?? null,
 			topN,
+			filters.sku ?? null,
 		]),
 	]);
 

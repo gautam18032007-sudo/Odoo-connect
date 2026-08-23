@@ -26,6 +26,7 @@ export async function getPaymentAnalysis(
       AND ($4::text IS NULL OR category = $4)
       AND ($5::text IS NULL OR brand = $5)
       AND ($6::text[] IS NULL OR category <> ALL($6::text[]))
+      AND ($7::text IS NULL OR (sku_code ILIKE '%' || $7 || '%' OR item_name ILIKE '%' || $7 || '%'))
     GROUP BY payment_method ORDER BY revenue DESC`;
 
 	const byStoreQueryString = `
@@ -42,6 +43,7 @@ export async function getPaymentAnalysis(
 			filters.category ?? null,
 			filters.brand ?? null,
 			food ?? null,
+			filters.sku ?? null,
 		]),
 		(db as any).query(byStoreQueryString, [
 			periods.currentStart,
