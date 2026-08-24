@@ -43,7 +43,8 @@ export async function GET(req: NextRequest) {
 				storeBreakdown,
 				fastMoving: fastSlow.fastMoving,
 				slowMoving: fastSlow.slowMoving,
-				reorderRecommendations: reorderRecs,
+				reorderRecommendations: reorderRecs.items,
+				reorderEligibleCount: reorderRecs.totalEligibleCount,
 				stockAging,
 				performance: {
 					queryLatencyMs,

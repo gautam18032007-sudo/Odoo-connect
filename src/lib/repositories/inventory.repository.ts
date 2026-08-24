@@ -271,35 +271,49 @@ export async function getFastSlowMovingProducts(filters?: {
 		filters?.brand && filters.brand !== "All Brands" ? filters.brand : null;
 	const skuFilter = filters?.sku ? `%${filters.sku.trim()}%` : null;
 
+	// fi_agg/sl_agg pre-aggregate each side to one row per product BEFORE
+	// joining to dim_products, so the two independent 1-to-many relations
+	// (locations, sale lines) never fan out against each other under a
+	// shared GROUP BY. fi_agg also folds the store scoping in directly,
+	// since it must filter fact_inventory rows before summing, not after.
 	const fastResult = await sql`
 		SELECT
 			p.id,
 			p.name,
 			COALESCE(p.default_code, 'SKU-' || p.id) AS sku,
 			COALESCE(p.category, 'General') AS category,
-			COALESCE(SUM(fi.quantity), p.qty_available) AS qty_available,
+			COALESCE(fi_agg.qty_sum, p.qty_available, 0) AS qty_available,
 			p.list_price,
-			COALESCE(SUM(sl.qty), 0) AS units_sold_30d
+			COALESCE(sl_agg.units_sold_30d, 0) AS units_sold_30d
 		FROM dim_products p
-		LEFT JOIN fact_inventory fi ON p.id = fi.product_id
-		LEFT JOIN dim_stores s ON fi.location_id = s.location_id
-		LEFT JOIN fact_sales_lines sl ON p.id = sl.product_id
+		LEFT JOIN (
+			SELECT fi.product_id, SUM(fi.quantity) AS qty_sum
+			FROM fact_inventory fi
+			LEFT JOIN dim_stores s ON fi.location_id = s.location_id
+			WHERE (${storeFilter}::TEXT IS NULL OR s.name ILIKE ${storeFilter} OR s.code ILIKE ${storeFilter} OR s.id IN (
+			        SELECT so2.store_id
+			        FROM fact_sales_orders so2
+			        JOIN sales_fact_v sf ON LOWER(TRIM(so2.name)) = LOWER(TRIM(sf.bill_no))
+			        WHERE sf.store_display_name ILIKE ${storeFilter} OR sf.billed_by ILIKE ${storeFilter}
+			  ))
+			GROUP BY fi.product_id
+		) fi_agg ON fi_agg.product_id = p.id
+		LEFT JOIN (
+			SELECT product_id, SUM(qty) AS units_sold_30d
+			FROM fact_sales_lines
+			WHERE updated_at >= NOW() - INTERVAL '30 days'
+			GROUP BY product_id
+		) sl_agg ON sl_agg.product_id = p.id
 		WHERE p.active = true
-		  AND (${storeFilter}::TEXT IS NULL OR s.name ILIKE ${storeFilter} OR s.code ILIKE ${storeFilter} OR s.id IN (
-		        SELECT so2.store_id 
-		        FROM fact_sales_orders so2 
-		        JOIN sales_fact_v sf ON LOWER(TRIM(so2.name)) = LOWER(TRIM(sf.bill_no))
-		        WHERE sf.store_display_name ILIKE ${storeFilter} OR sf.billed_by ILIKE ${storeFilter}
-		  ))
+		  AND (${storeFilter}::TEXT IS NULL OR fi_agg.product_id IS NOT NULL)
 		  AND (${categoryFilter}::TEXT IS NULL OR TRIM(p.category) ILIKE TRIM(${categoryFilter}))
 		  AND (${brandFilter}::TEXT IS NULL OR EXISTS (
-		        SELECT 1 FROM sales_fact sf 
+		        SELECT 1 FROM sales_fact sf
 		        WHERE sf.brand ILIKE ${brandFilter}
 		          AND (LOWER(TRIM(p.name)) = LOWER(TRIM(sf.item_name)) OR (p.default_code IS NOT NULL AND p.default_code = sf.sku_code) OR (p.barcode IS NOT NULL AND p.barcode = sf.sku_code))
 		  ))
 		  AND (${skuFilter}::TEXT IS NULL OR p.name ILIKE ${skuFilter} OR p.default_code ILIKE ${skuFilter})
-		GROUP BY p.id, p.name, p.default_code, p.category, p.qty_available, p.list_price
-		HAVING COALESCE(SUM(sl.qty), 0) > 0
+		  AND COALESCE(sl_agg.units_sold_30d, 0) > 0
 		ORDER BY units_sold_30d DESC
 		LIMIT 10
 	`;
@@ -310,28 +324,37 @@ export async function getFastSlowMovingProducts(filters?: {
 			p.name,
 			COALESCE(p.default_code, 'SKU-' || p.id) AS sku,
 			COALESCE(p.category, 'General') AS category,
-			COALESCE(SUM(fi.quantity), p.qty_available) AS qty_available,
+			COALESCE(fi_agg.qty_sum, p.qty_available, 0) AS qty_available,
 			p.list_price,
-			COALESCE(SUM(sl.qty), 0) AS units_sold_30d
+			COALESCE(sl_agg.units_sold_30d, 0) AS units_sold_30d
 		FROM dim_products p
-		LEFT JOIN fact_inventory fi ON p.id = fi.product_id
-		LEFT JOIN dim_stores s ON fi.location_id = s.location_id
-		LEFT JOIN fact_sales_lines sl ON p.id = sl.product_id
-		WHERE p.active = true AND p.qty_available > 0
-		  AND (${storeFilter}::TEXT IS NULL OR s.name ILIKE ${storeFilter} OR s.code ILIKE ${storeFilter} OR s.id IN (
-		        SELECT so2.store_id 
-		        FROM fact_sales_orders so2 
-		        JOIN sales_fact_v sf ON LOWER(TRIM(so2.name)) = LOWER(TRIM(sf.bill_no))
-		        WHERE sf.store_display_name ILIKE ${storeFilter} OR sf.billed_by ILIKE ${storeFilter}
-		  ))
+		LEFT JOIN (
+			SELECT fi.product_id, SUM(fi.quantity) AS qty_sum
+			FROM fact_inventory fi
+			LEFT JOIN dim_stores s ON fi.location_id = s.location_id
+			WHERE (${storeFilter}::TEXT IS NULL OR s.name ILIKE ${storeFilter} OR s.code ILIKE ${storeFilter} OR s.id IN (
+			        SELECT so2.store_id
+			        FROM fact_sales_orders so2
+			        JOIN sales_fact_v sf ON LOWER(TRIM(so2.name)) = LOWER(TRIM(sf.bill_no))
+			        WHERE sf.store_display_name ILIKE ${storeFilter} OR sf.billed_by ILIKE ${storeFilter}
+			  ))
+			GROUP BY fi.product_id
+		) fi_agg ON fi_agg.product_id = p.id
+		LEFT JOIN (
+			SELECT product_id, SUM(qty) AS units_sold_30d
+			FROM fact_sales_lines
+			WHERE updated_at >= NOW() - INTERVAL '30 days'
+			GROUP BY product_id
+		) sl_agg ON sl_agg.product_id = p.id
+		WHERE p.active = true AND COALESCE(fi_agg.qty_sum, p.qty_available, 0) > 0
+		  AND (${storeFilter}::TEXT IS NULL OR fi_agg.product_id IS NOT NULL)
 		  AND (${categoryFilter}::TEXT IS NULL OR TRIM(p.category) ILIKE TRIM(${categoryFilter}))
 		  AND (${brandFilter}::TEXT IS NULL OR EXISTS (
-		        SELECT 1 FROM sales_fact sf 
+		        SELECT 1 FROM sales_fact sf
 		        WHERE sf.brand ILIKE ${brandFilter}
 		          AND (LOWER(TRIM(p.name)) = LOWER(TRIM(sf.item_name)) OR (p.default_code IS NOT NULL AND p.default_code = sf.sku_code) OR (p.barcode IS NOT NULL AND p.barcode = sf.sku_code))
 		  ))
 		  AND (${skuFilter}::TEXT IS NULL OR p.name ILIKE ${skuFilter} OR p.default_code ILIKE ${skuFilter})
-		GROUP BY p.id, p.name, p.default_code, p.category, p.qty_available, p.list_price
 		ORDER BY units_sold_30d ASC
 		LIMIT 10
 	`;
@@ -390,37 +413,68 @@ export async function getItemVelocityPaged(
 	const orderColumn = sortColumn[params.sortBy] || "units_sold_30d";
 	const orderDir = params.sortDir === "asc" ? "ASC" : "DESC";
 
-	const result = await sql`
+	// This project's Neon client has no sql.unsafe() (that's a postgres.js-only
+	// API) — the ORDER BY column/direction must come from a literal whitelist
+	// (sortColumn above, plus this direction guard) and be spliced into the
+	// query text directly via sql.query()'s raw-string path, never from
+	// unvalidated input.
+	if (!["units_sold_30d", "qty_available", "name"].includes(orderColumn)) {
+		throw new Error(`Invalid sort column: ${orderColumn}`);
+	}
+	if (orderDir !== "ASC" && orderDir !== "DESC") {
+		throw new Error(`Invalid sort direction: ${orderDir}`);
+	}
+
+	const likeSearch = `%${search}%`;
+	const queryText = `
 		SELECT
 			p.id,
 			p.name,
 			COALESCE(p.default_code, 'SKU-' || p.id) AS sku,
 			COALESCE(p.category, 'General') AS category,
-			COALESCE(SUM(fi.quantity), p.qty_available) AS qty_available,
+			COALESCE(fi_agg.qty_sum, p.qty_available, 0) AS qty_available,
 			p.list_price,
-			COALESCE(SUM(sl.qty), 0) AS units_sold_30d
+			COALESCE(sl_agg.units_sold_30d, 0) AS units_sold_30d
 		FROM dim_products p
-		LEFT JOIN fact_inventory fi ON p.id = fi.product_id
-		LEFT JOIN dim_stores s ON fi.location_id = s.location_id
-		LEFT JOIN fact_sales_lines sl ON p.id = sl.product_id
+		LEFT JOIN (
+			SELECT fi.product_id, SUM(fi.quantity) AS qty_sum
+			FROM fact_inventory fi
+			LEFT JOIN dim_stores s ON fi.location_id = s.location_id
+			WHERE ($6::text IS NULL OR s.name ILIKE $6 OR s.code ILIKE $6 OR s.id IN (
+			        SELECT so2.store_id
+			        FROM fact_sales_orders so2
+			        JOIN sales_fact_v sf ON LOWER(TRIM(so2.name)) = LOWER(TRIM(sf.bill_no))
+			        WHERE sf.store_display_name ILIKE $6 OR sf.billed_by ILIKE $6
+			  ))
+			GROUP BY fi.product_id
+		) fi_agg ON fi_agg.product_id = p.id
+		LEFT JOIN (
+			SELECT product_id, SUM(qty) AS units_sold_30d
+			FROM fact_sales_lines
+			WHERE updated_at >= NOW() - INTERVAL '30 days'
+			GROUP BY product_id
+		) sl_agg ON sl_agg.product_id = p.id
 		WHERE p.active = true
-		  AND (${search} = '' OR p.name ILIKE ${"%" + search + "%"} OR p.default_code ILIKE ${"%" + search + "%"})
-		  AND (${storeFilter}::TEXT IS NULL OR s.name ILIKE ${storeFilter} OR s.code ILIKE ${storeFilter} OR s.id IN (
-		        SELECT so2.store_id 
-		        FROM fact_sales_orders so2 
-		        JOIN sales_fact_v sf ON LOWER(TRIM(so2.name)) = LOWER(TRIM(sf.bill_no))
-		        WHERE sf.store_display_name ILIKE ${storeFilter} OR sf.billed_by ILIKE ${storeFilter}
-		  ))
-		  AND (${categoryFilter}::TEXT IS NULL OR TRIM(p.category) ILIKE TRIM(${categoryFilter}))
-		  AND (${brandFilter}::TEXT IS NULL OR EXISTS (
-		        SELECT 1 FROM sales_fact sf 
-		        WHERE sf.brand ILIKE ${brandFilter}
+		  AND ($1 = '' OR p.name ILIKE $2 OR p.default_code ILIKE $2)
+		  AND ($6::text IS NULL OR fi_agg.product_id IS NOT NULL)
+		  AND ($3::text IS NULL OR TRIM(p.category) ILIKE TRIM($3))
+		  AND ($4::text IS NULL OR EXISTS (
+		        SELECT 1 FROM sales_fact sf
+		        WHERE sf.brand ILIKE $4
 		          AND (LOWER(TRIM(p.name)) = LOWER(TRIM(sf.item_name)) OR (p.default_code IS NOT NULL AND p.default_code = sf.sku_code) OR (p.barcode IS NOT NULL AND p.barcode = sf.sku_code))
 		  ))
-		GROUP BY p.id, p.name, p.default_code, p.category, p.qty_available, p.list_price
-		ORDER BY ${sql.unsafe(orderColumn)} ${sql.unsafe(orderDir)}
-		LIMIT ${pageSize} OFFSET ${offset}
+		ORDER BY ${orderColumn} ${orderDir}
+		LIMIT $5 OFFSET $7
 	`;
+	const result = await (sql as any).query(queryText, [
+		search,
+		likeSearch,
+		categoryFilter,
+		brandFilter,
+		pageSize,
+		storeFilter,
+		offset,
+	]);
 
 	const countResult = await sql`
 		SELECT COUNT(DISTINCT p.id) AS total
@@ -461,7 +515,7 @@ export async function getReorderRecommendations(filters?: {
 	category?: string;
 	brand?: string;
 	sku?: string;
-}): Promise<ReorderRecommendation[]> {
+}): Promise<{ items: ReorderRecommendation[]; totalEligibleCount: number }> {
 	const storeFilter =
 		filters?.store && filters.store !== "ALL" && filters.store !== "All Stores"
 			? filters.store
@@ -474,38 +528,80 @@ export async function getReorderRecommendations(filters?: {
 		filters?.brand && filters.brand !== "All Brands" ? filters.brand : null;
 	const skuFilter = filters?.sku ? `%${filters.sku.trim()}%` : null;
 
+	// fi_agg pre-aggregates stock per product (store-scoped) so eligibility
+	// and display use the same live fact_inventory total, not the separately
+	// -synced (and frequently stale) dim_products.qty_available.
 	const result = await sql`
-		SELECT 
+		SELECT
 			p.id,
 			p.name,
 			COALESCE(p.default_code, 'SKU-' || p.id) AS sku,
 			COALESCE(p.category, 'General') AS category,
-			COALESCE(SUM(fi.quantity), p.qty_available) AS qty_available,
-			COALESCE(SUM(sl.qty), 0) AS units_sold_30d
+			COALESCE(fi_agg.qty_sum, p.qty_available, 0) AS qty_available,
+			COALESCE(sl_agg.units_sold_30d, 0) AS units_sold_30d
 		FROM dim_products p
-		LEFT JOIN fact_inventory fi ON p.id = fi.product_id
-		LEFT JOIN dim_stores s ON fi.location_id = s.location_id
-		LEFT JOIN fact_sales_lines sl ON p.id = sl.product_id
-		WHERE p.active = true AND p.qty_available <= 15
-		  AND (${storeFilter}::TEXT IS NULL OR s.name ILIKE ${storeFilter} OR s.code ILIKE ${storeFilter} OR s.id IN (
-		        SELECT so2.store_id 
-		        FROM fact_sales_orders so2 
-		        JOIN sales_fact_v sf ON LOWER(TRIM(so2.name)) = LOWER(TRIM(sf.bill_no))
-		        WHERE sf.store_display_name ILIKE ${storeFilter} OR sf.billed_by ILIKE ${storeFilter}
-		  ))
+		LEFT JOIN (
+			SELECT fi.product_id, SUM(fi.quantity) AS qty_sum
+			FROM fact_inventory fi
+			LEFT JOIN dim_stores s ON fi.location_id = s.location_id
+			WHERE (${storeFilter}::TEXT IS NULL OR s.name ILIKE ${storeFilter} OR s.code ILIKE ${storeFilter} OR s.id IN (
+			        SELECT so2.store_id
+			        FROM fact_sales_orders so2
+			        JOIN sales_fact_v sf ON LOWER(TRIM(so2.name)) = LOWER(TRIM(sf.bill_no))
+			        WHERE sf.store_display_name ILIKE ${storeFilter} OR sf.billed_by ILIKE ${storeFilter}
+			  ))
+			GROUP BY fi.product_id
+		) fi_agg ON fi_agg.product_id = p.id
+		LEFT JOIN (
+			SELECT product_id, SUM(qty) AS units_sold_30d
+			FROM fact_sales_lines
+			WHERE updated_at >= NOW() - INTERVAL '30 days'
+			GROUP BY product_id
+		) sl_agg ON sl_agg.product_id = p.id
+		WHERE p.active = true AND COALESCE(fi_agg.qty_sum, p.qty_available, 0) <= 15
+		  AND (${storeFilter}::TEXT IS NULL OR fi_agg.product_id IS NOT NULL)
 		  AND (${categoryFilter}::TEXT IS NULL OR TRIM(p.category) ILIKE TRIM(${categoryFilter}))
 		  AND (${brandFilter}::TEXT IS NULL OR EXISTS (
-		        SELECT 1 FROM sales_fact sf 
+		        SELECT 1 FROM sales_fact sf
 		        WHERE sf.brand ILIKE ${brandFilter}
 		          AND (LOWER(TRIM(p.name)) = LOWER(TRIM(sf.item_name)) OR (p.default_code IS NOT NULL AND p.default_code = sf.sku_code) OR (p.barcode IS NOT NULL AND p.barcode = sf.sku_code))
 		  ))
 		  AND (${skuFilter}::TEXT IS NULL OR p.name ILIKE ${skuFilter} OR p.default_code ILIKE ${skuFilter})
-		GROUP BY p.id, p.name, p.default_code, p.category, p.qty_available
 		ORDER BY qty_available ASC
 		LIMIT 10
 	`;
 
-	return result.map((r) => {
+	// Total size of the eligible pool, independent of the LIMIT 10 above —
+	// so the UI can say "Top 10 of N" honestly instead of implying completeness.
+	const countResult = await sql`
+		SELECT COUNT(*) AS total FROM (
+			SELECT p.id
+			FROM dim_products p
+			LEFT JOIN (
+				SELECT fi.product_id, SUM(fi.quantity) AS qty_sum
+				FROM fact_inventory fi
+				LEFT JOIN dim_stores s ON fi.location_id = s.location_id
+				WHERE (${storeFilter}::TEXT IS NULL OR s.name ILIKE ${storeFilter} OR s.code ILIKE ${storeFilter} OR s.id IN (
+				        SELECT so2.store_id
+				        FROM fact_sales_orders so2
+				        JOIN sales_fact_v sf ON LOWER(TRIM(so2.name)) = LOWER(TRIM(sf.bill_no))
+				        WHERE sf.store_display_name ILIKE ${storeFilter} OR sf.billed_by ILIKE ${storeFilter}
+				  ))
+				GROUP BY fi.product_id
+			) fi_agg ON fi_agg.product_id = p.id
+			WHERE p.active = true AND COALESCE(fi_agg.qty_sum, p.qty_available, 0) <= 15
+			  AND (${storeFilter}::TEXT IS NULL OR fi_agg.product_id IS NOT NULL)
+			  AND (${categoryFilter}::TEXT IS NULL OR TRIM(p.category) ILIKE TRIM(${categoryFilter}))
+			  AND (${brandFilter}::TEXT IS NULL OR EXISTS (
+			        SELECT 1 FROM sales_fact sf
+			        WHERE sf.brand ILIKE ${brandFilter}
+			          AND (LOWER(TRIM(p.name)) = LOWER(TRIM(sf.item_name)) OR (p.default_code IS NOT NULL AND p.default_code = sf.sku_code) OR (p.barcode IS NOT NULL AND p.barcode = sf.sku_code))
+			  ))
+			  AND (${skuFilter}::TEXT IS NULL OR p.name ILIKE ${skuFilter} OR p.default_code ILIKE ${skuFilter})
+		) t
+	`;
+
+	const items = result.map((r) => {
 		const qty = Number(r.qty_available || 0);
 		const sold30d = Number(r.units_sold_30d || 0);
 		const dailyRate = Math.max(0.5, Number((sold30d / 30).toFixed(1)));
@@ -514,7 +610,8 @@ export async function getReorderRecommendations(filters?: {
 		// Pure Odoo-driven target buffer calculation (30-day target inventory minus current SOH)
 		const targetStockBuffer = Math.ceil(dailyRate * 30);
 		const suggestedQty = Math.max(0, targetStockBuffer - qty);
-		const urgency = qty <= 2 ? "critical" : qty <= 8 ? "high" : "medium";
+		const urgency: ReorderRecommendation["urgency"] =
+			qty <= 2 ? "critical" : qty <= 8 ? "high" : "medium";
 
 		return {
 			productId: Number(r.id),
@@ -529,6 +626,8 @@ export async function getReorderRecommendations(filters?: {
 			urgency,
 		};
 	});
+
+	return { items, totalEligibleCount: Number(countResult[0]?.total || 0) };
 }
 
 /**

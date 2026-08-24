@@ -113,6 +113,7 @@ interface InventoryDashboardData {
 		recommendedVendor: string;
 		urgency: "critical" | "high" | "medium";
 	}>;
+	reorderEligibleCount: number;
 	stockAging: Array<{
 		ageRange: string;
 		itemCount: number;
@@ -339,6 +340,7 @@ export default function ExecutiveInventoryDashboardPage() {
 		fastMoving,
 		slowMoving,
 		reorderRecommendations,
+		reorderEligibleCount,
 		stockAging,
 		performance,
 	} = data;
@@ -1017,15 +1019,18 @@ export default function ExecutiveInventoryDashboardPage() {
 						<div>
 							<CardTitle className="flex items-center gap-2 text-violet-700 dark:text-violet-400 text-base font-semibold">
 								<Zap className="size-5" />
-								AI Automated Replenishment Recommendations
+								Top 10 AI Reorder Recommendations
 							</CardTitle>
 							<CardDescription>
-								Calculated from 30-day velocity, lead time & safety stock
-								buffers
+								Calculated from 30-day velocity and current stock-on-hand.
+								Showing the {reorderRecommendations.length} most urgent of{" "}
+								{reorderEligibleCount.toLocaleString()} products eligible for
+								reorder — not the full list.
 							</CardDescription>
 						</div>
 						<Badge className="bg-violet-600 text-white font-mono">
-							AI Engine Active
+							Top {reorderRecommendations.length} of{" "}
+							{reorderEligibleCount.toLocaleString()}
 						</Badge>
 					</div>
 				</CardHeader>
@@ -1044,43 +1049,57 @@ export default function ExecutiveInventoryDashboardPage() {
 								</TableRow>
 							</TableHeader>
 							<TableBody>
-								{reorderRecommendations.map((rec) => (
-									<TableRow key={rec.productId}>
-										<TableCell className="whitespace-normal">
-											<div className="flex items-center gap-2">
-												<Badge
-													className={
-														rec.urgency === "critical"
-															? "bg-destructive text-white text-[10px]"
-															: rec.urgency === "high"
-																? "bg-amber-500 text-white text-[10px]"
-																: "bg-blue-500 text-white text-[10px]"
-													}
-												>
-													{rec.urgency.toUpperCase()}
-												</Badge>
-												<div className="truncate">
-													<p className="font-medium truncate">{rec.name}</p>
-													<p className="text-xs text-muted-foreground font-mono">
-														{rec.sku}
-													</p>
-												</div>
-											</div>
-										</TableCell>
-										<TableCell className="text-center font-mono font-bold text-destructive">
-											{rec.qtyOnHand}
-										</TableCell>
-										<TableCell className="text-center text-xs font-mono">
-											{rec.dailyRunRate} / day
-										</TableCell>
-										<TableCell className="text-center font-bold text-xs text-amber-600 font-mono">
-											{rec.daysOfSupplyRemaining} days left
-										</TableCell>
-										<TableCell className="text-right font-mono font-bold text-violet-700 dark:text-violet-300">
-											+{rec.suggestedReorderQty} units
+								{reorderRecommendations.length === 0 ? (
+									<TableRow>
+										<TableCell colSpan={5} className="py-8">
+											<Empty>
+												<EmptyTitle>No reorder candidates</EmptyTitle>
+												<EmptyDescription>
+													No products in the current filter match the reorder
+													criteria (stock ≤15 units).
+												</EmptyDescription>
+											</Empty>
 										</TableCell>
 									</TableRow>
-								))}
+								) : (
+									reorderRecommendations.map((rec) => (
+										<TableRow key={rec.productId}>
+											<TableCell className="whitespace-normal">
+												<div className="flex items-center gap-2">
+													<Badge
+														className={
+															rec.urgency === "critical"
+																? "bg-destructive text-white text-[10px]"
+																: rec.urgency === "high"
+																	? "bg-amber-500 text-white text-[10px]"
+																	: "bg-blue-500 text-white text-[10px]"
+														}
+													>
+														{rec.urgency.toUpperCase()}
+													</Badge>
+													<div className="truncate">
+														<p className="font-medium truncate">{rec.name}</p>
+														<p className="text-xs text-muted-foreground font-mono">
+															{rec.sku}
+														</p>
+													</div>
+												</div>
+											</TableCell>
+											<TableCell className="text-center font-mono font-bold text-destructive">
+												{rec.qtyOnHand}
+											</TableCell>
+											<TableCell className="text-center text-xs font-mono">
+												{rec.dailyRunRate} / day
+											</TableCell>
+											<TableCell className="text-center font-bold text-xs text-amber-600 font-mono">
+												{rec.daysOfSupplyRemaining} days left
+											</TableCell>
+											<TableCell className="text-right font-mono font-bold text-violet-700 dark:text-violet-300">
+												+{rec.suggestedReorderQty} units
+											</TableCell>
+										</TableRow>
+									))
+								)}
 							</TableBody>
 						</Table>
 					</div>
