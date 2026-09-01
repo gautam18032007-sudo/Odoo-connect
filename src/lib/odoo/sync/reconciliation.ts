@@ -13,6 +13,11 @@ import {
 	upsertSalesOrders,
 	upsertStores,
 } from "../../repositories/odoo.repository";
+import {
+	backfillStoreSourceFields,
+	type OdooPosConfigDimension,
+	upsertPosConfigs,
+} from "../../repositories/odoo-dimensions.repository";
 import { formatDateTimeForOdoo, type OdooClient } from "../client";
 
 export interface ReconciliationOptions {
@@ -300,40 +305,100 @@ export async function runWindowedReconciliation(
 		`🚀 Starting Windowed Reconciliation (Window Size: ${windowDays} days, End Date: ${endDateStr})...`,
 	);
 
-	// Ensure store mappings exist first
+	// Ensure store mappings exist first. On any failure, fail safe: log and
+	// leave dim_stores exactly as it is — do NOT fabricate stores with
+	// invented Odoo IDs (see docs/ODOO_SOURCE_OF_TRUTH_AUDIT.md Phase 4 §8,
+	// same fix already applied to syncSales.ts).
 	try {
-		await client
-			.callKw("pos.config", "search_read", [], { fields: ["id", "name"] })
-			.then((configs) => {
-				if (Array.isArray(configs) && configs.length > 0) {
-					const stores: OdooStore[] = configs.map((c: any) => {
-						let code = "STORE";
-						const nameLower = String(c.name).toLowerCase();
-						if (nameLower.includes("zenzebra")) code = "ZZ";
-						else if (nameLower.includes("klj")) code = "KLJ";
-						else if (
-							nameLower.includes("swn") ||
-							nameLower.includes("smartworks")
-						)
-							code = "SWN";
-						return { id: Number(c.id), name: String(c.name), code };
-					});
-					return upsertStores(stores);
-				}
-			})
-			.catch(() => {
-				return upsertStores([
-					{ id: 1, name: "ZenZebra (Flagship Store)", code: "ZZ" },
-					{ id: 2, name: "KLJ Noida Store", code: "KLJ" },
-					{ id: 3, name: "Smartworks Noida Store", code: "SWN" },
-				]);
+		const configs = await client.callKw<any[]>(
+			"pos.config",
+			"search_read",
+			[],
+			{
+				fields: ["id", "name", "company_id", "warehouse_id", "picking_type_id"],
+			},
+		);
+
+		if (Array.isArray(configs) && configs.length > 0) {
+			const stores: OdooStore[] = configs.map((c: any) => {
+				let code = "STORE";
+				const nameLower = String(c.name).toLowerCase();
+				if (nameLower.includes("zenzebra")) code = "ZZ";
+				else if (nameLower.includes("klj")) code = "KLJ";
+				else if (nameLower.includes("swn") || nameLower.includes("smartworks"))
+					code = "SWN";
+				return { id: Number(c.id), name: String(c.name), code };
 			});
-	} catch {
-		await upsertStores([
-			{ id: 1, name: "ZenZebra (Flagship Store)", code: "ZZ" },
-			{ id: 2, name: "KLJ Noida Store", code: "KLJ" },
-			{ id: 3, name: "Smartworks Noida Store", code: "SWN" },
-		]);
+			await upsertStores(stores);
+
+			// Persist pos.config as its own canonical dimension and correct
+			// dim_stores.company_id/code/location_id from it — same Phase 3/4
+			// pattern as syncSales.ts, no new mapping logic.
+			try {
+				const warehouseIds = [
+					...new Set(
+						configs
+							.map((c) =>
+								Array.isArray(c.warehouse_id)
+									? Number(c.warehouse_id[0])
+									: null,
+							)
+							.filter((id): id is number => id !== null),
+					),
+				];
+				const warehouseCodeById = new Map<number, string>();
+				if (warehouseIds.length > 0) {
+					const warehouses = await client.callKw<any[]>(
+						"stock.warehouse",
+						"search_read",
+						[],
+						{ domain: [["id", "in", warehouseIds]], fields: ["id", "code"] },
+					);
+					for (const wh of warehouses) {
+						if (wh.code) warehouseCodeById.set(Number(wh.id), String(wh.code));
+					}
+				}
+
+				const posConfigDimensions: OdooPosConfigDimension[] = configs.map(
+					(c) => {
+						const warehouseId = Array.isArray(c.warehouse_id)
+							? Number(c.warehouse_id[0])
+							: null;
+						return {
+							id: Number(c.id),
+							name: String(c.name),
+							companyId: Array.isArray(c.company_id)
+								? Number(c.company_id[0])
+								: null,
+							warehouseId,
+							warehouseCode: warehouseId
+								? (warehouseCodeById.get(warehouseId) ?? null)
+								: null,
+							pickingTypeId: Array.isArray(c.picking_type_id)
+								? Number(c.picking_type_id[0])
+								: null,
+							active: c.active !== false,
+						};
+					},
+				);
+				await upsertPosConfigs(posConfigDimensions);
+				await backfillStoreSourceFields();
+			} catch (dimErr: any) {
+				console.warn(
+					"[runWindowedReconciliation] dim_pos_configs / dim_stores canonical backfill failed (non-fatal):",
+					dimErr.message,
+				);
+			}
+		} else {
+			console.error(
+				"[runWindowedReconciliation] No POS configurations found in Odoo. Skipping store sync — existing dim_stores rows left untouched (no fabricated defaults).",
+			);
+		}
+	} catch (err: any) {
+		console.error(
+			"[runWindowedReconciliation] POS config query failed — skipping store sync (no fabricated defaults). Error:",
+			err.message,
+		);
 	}
 
 	const entitiesToSync = options.entity
