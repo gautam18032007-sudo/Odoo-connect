@@ -1,4 +1,10 @@
+import dns from "node:dns";
 import { type NeonQueryFunction, neon } from "@neondatabase/serverless";
+
+// Force IPv4-first resolution to prevent 10s undici timeout hangs on networks without IPv6 routing
+if (typeof dns.setDefaultResultOrder === "function") {
+	dns.setDefaultResultOrder("ipv4first");
+}
 
 // Placeholder mock SQL executor when DATABASE_URL is missing
 const mockSql = async (_strings: TemplateStringsArray, ..._values: any[]) => {
@@ -18,6 +24,14 @@ function createResilientSql(): NeonQueryFunction<false, false> {
 	const isConnectionTimeout = (error: any): boolean => {
 		if (!error) return false;
 		const msg = String(error?.message || "");
+		// Never retry on auth errors or quota limits
+		if (
+			msg.includes("password authentication failed") ||
+			msg.includes("compute time quota") ||
+			error?.status === 402
+		) {
+			return false;
+		}
 		const code = error?.code || error?.sourceError?.code;
 		const causeCode = error?.sourceError?.cause?.code;
 		return (

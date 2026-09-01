@@ -2,7 +2,9 @@ import {
 	type OdooInventory,
 	upsertInventory,
 } from "../../repositories/odoo.repository";
+import { getKnownLocationIds } from "../../repositories/odoo-dimensions.repository";
 import type { OdooClient } from "../client";
+import { syncLocationDimension } from "./syncDimensions";
 
 /**
  * Synchronizes current stock levels (stock.quant) from Odoo.
@@ -23,7 +25,18 @@ export async function syncInventory(client: OdooClient): Promise<number> {
 	let offset = 0;
 	const limit = 100;
 	let totalUpserted = 0;
+	let totalSkippedUnresolved = 0;
 	let hasMore = true;
+
+	// fact_inventory.location_id now has a FK to dim_locations (Phase 3) — an
+	// unresolved location would otherwise fail the whole batch insert
+	// (upsertInventory does one bulk UNNEST statement, not per-row). Resolve
+	// against the known set first; on a miss, try ONE dimension refresh per
+	// sync run (self-heal for a genuinely new Odoo location) rather than
+	// refetching every batch, then fail safe (skip + log) for anything still
+	// unresolved instead of guessing or crashing.
+	let knownLocationIds = await getKnownLocationIds();
+	let attemptedRefresh = false;
 
 	while (hasMore) {
 		console.log(
@@ -62,7 +75,7 @@ export async function syncInventory(client: OdooClient): Promise<number> {
 		}
 
 		console.log(`[syncInventory] Processing ${records.length} records...`);
-		const inventoryToUpsert = records
+		const mapped = records
 			.map((rec: any) => {
 				const productId = Array.isArray(rec.product_id)
 					? Number(rec.product_id[0])
@@ -86,6 +99,38 @@ export async function syncInventory(client: OdooClient): Promise<number> {
 			})
 			.filter((rec) => rec !== null) as OdooInventory[];
 
+		let unresolved = mapped.filter(
+			(rec) => !knownLocationIds.has(rec.locationId),
+		);
+		if (unresolved.length > 0 && !attemptedRefresh) {
+			attemptedRefresh = true;
+			console.warn(
+				`[syncInventory] ${unresolved.length} record(s) reference location(s) not yet in dim_locations — refreshing location dimension once: ${[...new Set(unresolved.map((r) => r.locationId))].join(", ")}`,
+			);
+			try {
+				await syncLocationDimension(client);
+				knownLocationIds = await getKnownLocationIds();
+				unresolved = mapped.filter(
+					(rec) => !knownLocationIds.has(rec.locationId),
+				);
+			} catch (refreshErr: any) {
+				console.warn(
+					"[syncInventory] Location dimension refresh failed (non-fatal):",
+					refreshErr.message,
+				);
+			}
+		}
+
+		const inventoryToUpsert = mapped.filter((rec) =>
+			knownLocationIds.has(rec.locationId),
+		);
+		if (unresolved.length > 0) {
+			totalSkippedUnresolved += unresolved.length;
+			console.error(
+				`[syncInventory] Skipping ${unresolved.length} record(s) with unresolved location_id (fail-safe, not fabricated): ${[...new Set(unresolved.map((r) => r.locationId))].join(", ")}`,
+			);
+		}
+
 		await upsertInventory(inventoryToUpsert);
 		totalUpserted += inventoryToUpsert.length;
 
@@ -97,7 +142,7 @@ export async function syncInventory(client: OdooClient): Promise<number> {
 	}
 
 	console.log(
-		`[syncInventory] Completed. Total stock.quant levels upserted: ${totalUpserted}`,
+		`[syncInventory] Completed. Total stock.quant levels upserted: ${totalUpserted}. Skipped (unresolved location): ${totalSkippedUnresolved}.`,
 	);
 	return totalUpserted;
 }

@@ -65,6 +65,14 @@ interface GlobalFilterBarProps {
 	 * Omitted by every other consumer — zero behavior change elsewhere.
 	 */
 	skuDisabledReason?: string;
+	/**
+	 * Opt-in: hides the Analysis Period / Compare Against date controls
+	 * entirely. For the Inventory Dashboard, which reflects current stock
+	 * only (no historical time series exists to filter by — see Phase 14/15
+	 * audit), showing a date picker implies a capability that doesn't exist.
+	 * Omitted by every other consumer — zero behavior change elsewhere.
+	 */
+	hideDateRange?: boolean;
 }
 
 export function GlobalFilterBar({
@@ -76,6 +84,7 @@ export function GlobalFilterBar({
 	onSearchProducts,
 	dataBounds,
 	skuDisabledReason,
+	hideDateRange = false,
 }: GlobalFilterBarProps) {
 	const {
 		startDate,
@@ -225,79 +234,49 @@ export function GlobalFilterBar({
 	return (
 		<div className="sticky top-0 z-40 mb-6 w-full border-b bg-background/95 pt-4 pb-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
 			<div className="flex flex-col gap-4">
-				{/* Row 1: Time Filters (Analysis Period vs Compare Against) */}
+				{/* Row 1: Time Filters (Analysis Period vs Compare Against) —
+				    hidden when hideDateRange is set, since date filtering has
+				    no effect on current-stock-only data (e.g. Inventory). */}
 				<div className="flex flex-wrap items-center gap-3">
 					<div className="flex items-center gap-2 font-medium text-muted-foreground text-sm mr-2 shrink-0">
 						<Filter className="size-4" />
 						<span>Global Filters</span>
 					</div>
 
-					{/* Analysis Period Box */}
-					<div className="flex flex-wrap items-center gap-2 border bg-muted/20 p-1 px-3 rounded-lg text-sm max-w-full">
-						<span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 border-r pr-2 mr-1">
-							Analysis Period
-						</span>
-						<Select
-							onValueChange={(value) => {
-								if (value === "allTime") {
-									if (dataBounds) {
-										setDateRange(dataBounds.minDate, dataBounds.maxDate);
-									}
-									return;
-								}
-								const range = getPresetRange(value);
-								if (range) setDateRange(range.startDate, range.endDate);
-							}}
-						>
-							<SelectTrigger className="h-7 w-[120px] sm:w-[130px] border-0 bg-transparent p-0 shadow-none focus:ring-0 text-xs">
-								<SelectValue placeholder="Quick range" />
-							</SelectTrigger>
-							<SelectContent>
-								{DATE_PRESETS.map((preset) => (
-									<SelectItem key={preset.value} value={preset.value}>
-										{preset.label}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-						<Input
-							type="date"
-							value={startDate}
-							onChange={(e) => setStartDate(e.target.value)}
-							className="h-7 w-[110px] sm:w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
-						/>
-						<span className="text-muted-foreground text-xs shrink-0">→</span>
-						<Input
-							type="date"
-							value={endDate}
-							onChange={(e) => setEndDate(e.target.value)}
-							className="h-7 w-[110px] sm:w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
-						/>
-					</div>
-
-					{/* Compare Against Box */}
-					<div className="flex flex-wrap items-center gap-2 border bg-muted/20 p-1 px-3 rounded-lg text-sm max-w-full">
-						<span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 border-r pr-2 mr-1">
-							Compare Against
-						</span>
-						<Select
-							value={compareMode}
-							onValueChange={(v) => setCompareMode(v as "mirror" | "custom")}
-						>
-							<SelectTrigger className="h-7 w-[130px] sm:w-[150px] border-0 bg-transparent p-0 shadow-none focus:ring-0 text-xs">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="mirror">vs Previous Period</SelectItem>
-								<SelectItem value="custom">vs Custom Period</SelectItem>
-							</SelectContent>
-						</Select>
-						{compareMode === "custom" && (
-							<>
+					{!hideDateRange && (
+						<>
+							{/* Analysis Period Box */}
+							<div className="flex flex-wrap items-center gap-2 border bg-muted/20 p-1 px-3 rounded-lg text-sm max-w-full">
+								<span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 border-r pr-2 mr-1">
+									Analysis Period
+								</span>
+								<Select
+									onValueChange={(value) => {
+										if (value === "allTime") {
+											if (dataBounds) {
+												setDateRange(dataBounds.minDate, dataBounds.maxDate);
+											}
+											return;
+										}
+										const range = getPresetRange(value);
+										if (range) setDateRange(range.startDate, range.endDate);
+									}}
+								>
+									<SelectTrigger className="h-7 w-[120px] sm:w-[130px] border-0 bg-transparent p-0 shadow-none focus:ring-0 text-xs">
+										<SelectValue placeholder="Quick range" />
+									</SelectTrigger>
+									<SelectContent>
+										{DATE_PRESETS.map((preset) => (
+											<SelectItem key={preset.value} value={preset.value}>
+												{preset.label}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
 								<Input
 									type="date"
-									value={compareStartDate}
-									onChange={(e) => setCompareStartDate(e.target.value)}
+									value={startDate}
+									onChange={(e) => setStartDate(e.target.value)}
 									className="h-7 w-[110px] sm:w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
 								/>
 								<span className="text-muted-foreground text-xs shrink-0">
@@ -305,13 +284,53 @@ export function GlobalFilterBar({
 								</span>
 								<Input
 									type="date"
-									value={compareEndDate}
-									onChange={(e) => setCompareEndDate(e.target.value)}
+									value={endDate}
+									onChange={(e) => setEndDate(e.target.value)}
 									className="h-7 w-[110px] sm:w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
 								/>
-							</>
-						)}
-					</div>
+							</div>
+
+							{/* Compare Against Box */}
+							<div className="flex flex-wrap items-center gap-2 border bg-muted/20 p-1 px-3 rounded-lg text-sm max-w-full">
+								<span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 border-r pr-2 mr-1">
+									Compare Against
+								</span>
+								<Select
+									value={compareMode}
+									onValueChange={(v) =>
+										setCompareMode(v as "mirror" | "custom")
+									}
+								>
+									<SelectTrigger className="h-7 w-[130px] sm:w-[150px] border-0 bg-transparent p-0 shadow-none focus:ring-0 text-xs">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="mirror">vs Previous Period</SelectItem>
+										<SelectItem value="custom">vs Custom Period</SelectItem>
+									</SelectContent>
+								</Select>
+								{compareMode === "custom" && (
+									<>
+										<Input
+											type="date"
+											value={compareStartDate}
+											onChange={(e) => setCompareStartDate(e.target.value)}
+											className="h-7 w-[110px] sm:w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
+										/>
+										<span className="text-muted-foreground text-xs shrink-0">
+											→
+										</span>
+										<Input
+											type="date"
+											value={compareEndDate}
+											onChange={(e) => setCompareEndDate(e.target.value)}
+											className="h-7 w-[110px] sm:w-[120px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-medium"
+										/>
+									</>
+								)}
+							</div>
+						</>
+					)}
 				</div>
 
 				{/* Row 2: Dimension Filters */}

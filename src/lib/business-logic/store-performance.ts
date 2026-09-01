@@ -50,14 +50,13 @@ function retailFilter(filters: DashboardFilters) {
 function calculateMetricGrowth(
 	current: number,
 	previous: number,
-	billedBy?: string,
+	storeAgeDays: number | null,
 ): number | "NEW STORE" {
 	if (previous === 0) {
-		if (
-			billedBy === "SmartworksNoida Noida" ||
-			billedBy === "Klj store" ||
-			!billedBy
-		) {
+		// A store is only "established" when it has a real opened_date in
+		// store_dimension. A missing opened_date must NOT be silently treated
+		// as mature — that would misclassify undocumented stores.
+		if (storeAgeDays !== null) {
 			return 0; // Established stores don't show "NEW STORE"
 		}
 		return "NEW STORE";
@@ -100,9 +99,10 @@ export async function getStorePerformance(
       GROUP BY store_display_name, billed_by
     ),
     total_curr AS (SELECT SUM(revenue) AS total_rev FROM curr)
-    SELECT 
+    SELECT
       COALESCE(c.store_display_name, p.store_display_name) AS store_display_name,
       COALESCE(c.billed_by, p.billed_by) AS billed_by,
+      sd.opened_date::text AS opened_date,
       c.revenue AS current_revenue,
       c.bill_cuts AS current_bill_cuts,
       c.units AS current_units,
@@ -110,8 +110,9 @@ export async function getStorePerformance(
       p.bill_cuts AS prev_bill_cuts,
       p.units AS prev_units,
       t.total_rev
-    FROM curr c 
+    FROM curr c
     FULL OUTER JOIN prev p ON c.billed_by = p.billed_by
+    LEFT JOIN store_dimension sd ON COALESCE(c.billed_by, p.billed_by) = sd.store_name
     CROSS JOIN total_curr t
     ORDER BY COALESCE(c.revenue, 0) DESC
   `;
@@ -132,6 +133,14 @@ export async function getStorePerformance(
 	return result.map((row: any) => {
 		const storeName = String(row.store_display_name || "Unknown");
 		const billedBy = String(row.billed_by || "Unknown");
+		// null (no store_dimension.opened_date) must stay null here — it is
+		// the signal calculateMetricGrowth uses to flag "NEW STORE" rather
+		// than silently assuming the store is mature (see getStoreAgeInDays'
+		// own null -> 999 fallback, which exists for a different diagnosis
+		// feature and is deliberately NOT reused for this decision).
+		const storeAgeDays = row.opened_date
+			? getStoreAgeInDays(row.opened_date, periods.currentEnd)
+			: null;
 
 		const currentRevenue = numberValue(row.current_revenue);
 		const prevRevenue = numberValue(row.prev_revenue);
@@ -154,22 +163,26 @@ export async function getStorePerformance(
 				revenue: {
 					current: currentRevenue,
 					previous: prevRevenue,
-					growth: calculateMetricGrowth(currentRevenue, prevRevenue, billedBy),
+					growth: calculateMetricGrowth(
+						currentRevenue,
+						prevRevenue,
+						storeAgeDays,
+					),
 				},
 				billCuts: {
 					current: currentBills,
 					previous: prevBills,
-					growth: calculateMetricGrowth(currentBills, prevBills, billedBy),
+					growth: calculateMetricGrowth(currentBills, prevBills, storeAgeDays),
 				},
 				aov: {
 					current: Math.round(currentAov * 100) / 100,
 					previous: Math.round(prevAov * 100) / 100,
-					growth: calculateMetricGrowth(currentAov, prevAov, billedBy),
+					growth: calculateMetricGrowth(currentAov, prevAov, storeAgeDays),
 				},
 				units: {
 					current: currentUnits,
 					previous: prevUnits,
-					growth: calculateMetricGrowth(currentUnits, prevUnits, billedBy),
+					growth: calculateMetricGrowth(currentUnits, prevUnits, storeAgeDays),
 				},
 			},
 			contributionPercent:
@@ -425,17 +438,25 @@ export async function getStoreAovBillsHistory(
 		const prevPrevBillsPerDay =
 			prevPrevWorkingDays > 0 ? prevPrevBills / prevPrevWorkingDays : 0;
 
+		// NEW-STORE detection must NOT use getStoreAgeInDays' own 999-day
+		// "assume mature" fallback (that fallback exists for the diagnosis
+		// feature below, storeAgeDays) — a missing opened_date has to stay
+		// null here so calculateMetricGrowth can flag it as a new store.
+		const newStoreAgeDays = row.opened_date
+			? getStoreAgeInDays(row.opened_date, currentEnd)
+			: null;
+
 		const revGrowth = calculateMetricGrowth(
 			currRevenue,
 			prevRevenue,
-			row.billed_by,
+			newStoreAgeDays,
 		);
 		const billGrowth = calculateMetricGrowth(
 			currBills,
 			prevBills,
-			row.billed_by,
+			newStoreAgeDays,
 		);
-		const aovGrowth = calculateMetricGrowth(currAov, prevAov, row.billed_by);
+		const aovGrowth = calculateMetricGrowth(currAov, prevAov, newStoreAgeDays);
 
 		const storeAgeDays = getStoreAgeInDays(row.opened_date, currentEnd);
 

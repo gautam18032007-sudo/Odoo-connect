@@ -2,10 +2,11 @@ import { type NextRequest, NextResponse } from "next/server";
 import {
 	getExecutiveInventoryMetrics,
 	getFastSlowMovingProducts,
-	getReorderRecommendations,
 	getStockAgingDistribution,
 	getStoreInventoryBreakdown,
 } from "@/lib/repositories/inventory.repository";
+
+const responseCache = new Map<string, { timestamp: number; payload: any }>();
 
 export async function GET(req: NextRequest) {
 	const startTime = Date.now();
@@ -25,31 +26,47 @@ export async function GET(req: NextRequest) {
 			sku: sku || undefined,
 		};
 
-		const [overview, storeBreakdown, fastSlow, reorderRecs, stockAging] =
-			await Promise.all([
-				getExecutiveInventoryMetrics(filters),
-				getStoreInventoryBreakdown(filters),
-				getFastSlowMovingProducts(filters),
-				getReorderRecommendations(filters),
-				getStockAgingDistribution(filters),
-			]);
+		const cacheKey = JSON.stringify(filters);
+		const cached = responseCache.get(cacheKey);
+		const now = Date.now();
+		if (cached && now - cached.timestamp < 15000) {
+			return NextResponse.json(cached.payload, {
+				headers: {
+					"X-Dashboard-Cache": "HIT",
+					"X-Response-Time-Ms": (now - startTime).toString(),
+				},
+			});
+		}
+
+		const [overview, storeBreakdown, fastSlow, stockAging] = await Promise.all([
+			getExecutiveInventoryMetrics(filters),
+			getStoreInventoryBreakdown(filters),
+			getFastSlowMovingProducts(filters),
+			getStockAgingDistribution(filters),
+		]);
 
 		const queryLatencyMs = Date.now() - startTime;
-
-		return NextResponse.json({
+		const payload = {
 			success: true,
 			data: {
 				overview,
 				storeBreakdown,
 				fastMoving: fastSlow.fastMoving,
 				slowMoving: fastSlow.slowMoving,
-				reorderRecommendations: reorderRecs.items,
-				reorderEligibleCount: reorderRecs.totalEligibleCount,
 				stockAging,
 				performance: {
 					queryLatencyMs,
 					dataFreshness: "2-5s (Odoo SaaS Live Sync)",
 				},
+			},
+		};
+
+		responseCache.set(cacheKey, { timestamp: now, payload });
+
+		return NextResponse.json(payload, {
+			headers: {
+				"X-Dashboard-Cache": "MISS",
+				"X-Response-Time-Ms": queryLatencyMs.toString(),
 			},
 		});
 	} catch (err: any) {

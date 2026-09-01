@@ -46,6 +46,13 @@ export function useStabilizedDashboard<T>({
 	const requestIdRef = useRef(0);
 	const fetcherRef = useRef(fetcher);
 	fetcherRef.current = fetcher;
+	// Tracks whether a request is currently in flight. Aborting a fetch()
+	// only stops the client from waiting on it — the Next.js API route
+	// handler keeps running its already-dispatched DB queries to completion
+	// server-side regardless. So the periodic poll tick (below) skips
+	// entirely while one is outstanding, instead of abort-and-replace,
+	// to avoid piling additional queries on top of a slow one still running.
+	const isFetchingRef = useRef(false);
 
 	const executeFetch = useCallback(
 		async (isBackground = false) => {
@@ -59,6 +66,7 @@ export function useStabilizedDashboard<T>({
 			const controller = new AbortController();
 			abortControllerRef.current = controller;
 			const currentRequestId = ++requestIdRef.current;
+			isFetchingRef.current = true;
 
 			const isFirstLoad = dataRef.current === null;
 
@@ -93,6 +101,7 @@ export function useStabilizedDashboard<T>({
 				if (currentRequestId === requestIdRef.current) {
 					setIsInitialLoading(false);
 					setIsRefreshing(false);
+					isFetchingRef.current = false;
 				}
 			}
 		},
@@ -107,6 +116,14 @@ export function useStabilizedDashboard<T>({
 		let intervalId: NodeJS.Timeout | null = null;
 		if (refreshInterval && refreshInterval > 0) {
 			intervalId = setInterval(() => {
+				// Skip background-tab ticks entirely — a hidden/minimized tab has
+				// no need for fresh data, and polling it anyway burns DB compute
+				// for nobody. We catch up immediately on refocus instead (below).
+				if (typeof document !== "undefined" && document.hidden) return;
+				// Skip this tick if the previous poll hasn't finished — a slow
+				// or degraded DB response must not accumulate additional
+				// concurrent query load on top of itself (see isFetchingRef).
+				if (isFetchingRef.current) return;
 				executeFetch(true);
 			}, refreshInterval);
 		}
@@ -114,14 +131,24 @@ export function useStabilizedDashboard<T>({
 		const handleRealtimeUpdate = () => {
 			executeFetch(true);
 		};
+		const handleVisibilityChange = () => {
+			if (typeof document !== "undefined" && !document.hidden) {
+				executeFetch(true);
+			}
+		};
 		if (typeof window !== "undefined") {
 			window.addEventListener("odoo-sync-updated", handleRealtimeUpdate);
+			document.addEventListener("visibilitychange", handleVisibilityChange);
 		}
 
 		return () => {
 			if (intervalId) clearInterval(intervalId);
 			if (typeof window !== "undefined") {
 				window.removeEventListener("odoo-sync-updated", handleRealtimeUpdate);
+				document.removeEventListener(
+					"visibilitychange",
+					handleVisibilityChange,
+				);
 			}
 			if (abortControllerRef.current) {
 				abortControllerRef.current.abort();

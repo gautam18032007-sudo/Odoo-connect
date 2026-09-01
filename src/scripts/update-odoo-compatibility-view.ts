@@ -10,8 +10,11 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
  * and docs/TECH_DEBT.md (TD-002 covers what's still a genuine placeholder:
  * brand and payment_method, neither of which has an Odoo-side source yet).
  *
- * Everything else in this view (Part A / Excel, store-code CASE expressions,
- * join structure) is unchanged from the live deployed version.
+ * Part B's store attribution (billed_by / store_display_name) now derives
+ * dynamically from dim_stores.name via fact_sales_orders.store_id, instead
+ * of a hardcoded KLJ/SWN CASE — new stores (e.g. HQ27GGN) appear correctly
+ * without a code change. Part A (legacy Excel) is unchanged, since sales_fact
+ * only ever contains the original two stores.
  */
 async function main() {
 	if (!process.env.DATABASE_URL) {
@@ -63,11 +66,7 @@ async function main() {
 			999999 AS upload_id, -- Reserved Odoo identifier
 			fo.name AS bill_no,
 			(fo.date_order AT TIME ZONE 'Asia/Kolkata')::date AS sale_date,
-			CASE
-				WHEN ds.code = 'KLJ' THEN 'Klj store'
-				WHEN ds.code = 'SWN' THEN 'SmartworksNoida Noida'
-				ELSE 'Head office'
-			END AS billed_by,
+			COALESCE(ds.name, 'Unknown Store') AS billed_by,
 			fl.id AS product_key,
 			COALESCE(dp.default_code, 'SKU-UNKNOWN') AS sku_code,
 			COALESCE(dp.name, 'Unknown Product') AS item_name,
@@ -91,11 +90,7 @@ async function main() {
 			'Odoo POS' AS payment_method,
 			dc.id AS customer_id,
 			dc.email AS customer_email,
-			CASE
-				WHEN ds.code = 'KLJ' THEN 'KLJ'
-				WHEN ds.code = 'SWN' THEN 'Smart Works Noida'
-				ELSE 'Head office'
-			END AS store_display_name
+			COALESCE(ds.name, 'Unknown Store') AS store_display_name
 		FROM fact_sales_lines fl
 		JOIN fact_sales_orders fo ON fl.order_id = fo.id
 		LEFT JOIN dim_products dp ON fl.product_id = dp.id

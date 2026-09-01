@@ -8,6 +8,14 @@ import {
 	upsertSalesOrders,
 	upsertStores,
 } from "../../repositories/odoo.repository";
+import {
+	backfillStoreSourceFields,
+	type OdooCategoryDimension,
+	type OdooPosConfigDimension,
+	upsertCategories,
+	upsertPosConfigs,
+	upsertProductCategoryLinks,
+} from "../../repositories/odoo-dimensions.repository";
 import { formatDateTimeForOdoo, type OdooClient } from "../client";
 
 async function fetchAndUpsertMissingProducts(
@@ -61,6 +69,29 @@ async function fetchAndUpsertMissingProducts(
 				isStorable: Boolean(rec.is_storable),
 			}));
 			await upsertProducts(productsToUpsert);
+
+			try {
+				const categoriesSeen = new Map<number, string>();
+				const links: { productId: number; categoryId: number }[] = [];
+				for (const rec of records) {
+					if (!Array.isArray(rec.categ_id)) continue;
+					const categoryId = Number(rec.categ_id[0]);
+					categoriesSeen.set(categoryId, String(rec.categ_id[1]));
+					links.push({ productId: Number(rec.id), categoryId });
+				}
+				if (categoriesSeen.size > 0) {
+					const categoryDimensions: OdooCategoryDimension[] = [
+						...categoriesSeen.entries(),
+					].map(([id, rawName]) => ({ id, rawName, parentCategoryId: null }));
+					await upsertCategories(categoryDimensions);
+				}
+				if (links.length > 0) await upsertProductCategoryLinks(links);
+			} catch (categErr: any) {
+				console.warn(
+					"[syncSales] category_id linkage failed for auto-recovered products (non-fatal):",
+					categErr.message,
+				);
+			}
 		}
 	} catch (err: any) {
 		console.error(
@@ -90,7 +121,7 @@ export async function syncSales(
 			"search_read",
 			[],
 			{
-				fields: ["id", "name", "picking_type_id"],
+				fields: ["id", "name", "picking_type_id", "company_id", "warehouse_id"],
 			},
 		);
 
@@ -133,6 +164,12 @@ export async function syncSales(
 			}
 
 			const storesToUpsert: OdooStore[] = configs.map((c) => {
+				// Legacy fallback code, kept only for the initial INSERT so a
+				// brand-new store still satisfies the dim_stores/fact_sales_orders
+				// FK before dimension data exists for it. Immediately corrected
+				// below via backfillStoreSourceFields(), which sources the real
+				// code/company/location from dim_pos_configs + dim_locations —
+				// see docs/ODOO_SOURCE_OF_TRUTH_AUDIT.md Phase 2 §5, Phase 3.
 				let code = "STORE";
 				const nameLower = c.name.toLowerCase();
 				if (nameLower.includes("zenzebra")) code = "ZZ";
@@ -158,30 +195,87 @@ export async function syncSales(
 			console.log(
 				`[syncSales] Successfully synced ${storesToUpsert.length} stores.`,
 			);
+
+			// Persist pos.config as its own canonical dimension (Phase 3/4) and
+			// immediately correct dim_stores.company_id/code/location_id from it
+			// plus dim_locations — replaces the substring-matched `code` above
+			// with the real stock.warehouse.code, and sets company_id, without
+			// ever fabricating a store row.
+			try {
+				const warehouseIds = [
+					...new Set(
+						configs
+							.map((c) =>
+								Array.isArray(c.warehouse_id)
+									? Number(c.warehouse_id[0])
+									: null,
+							)
+							.filter((id): id is number => id !== null),
+					),
+				];
+				const warehouseCodeById = new Map<number, string>();
+				if (warehouseIds.length > 0) {
+					const warehouses = await client.callKw<any[]>(
+						"stock.warehouse",
+						"search_read",
+						[],
+						{ domain: [["id", "in", warehouseIds]], fields: ["id", "code"] },
+					);
+					for (const wh of warehouses) {
+						if (wh.code) warehouseCodeById.set(Number(wh.id), String(wh.code));
+					}
+				}
+
+				const posConfigDimensions: OdooPosConfigDimension[] = configs.map(
+					(c) => {
+						const warehouseId = Array.isArray(c.warehouse_id)
+							? Number(c.warehouse_id[0])
+							: null;
+						return {
+							id: Number(c.id),
+							name: String(c.name),
+							companyId: Array.isArray(c.company_id)
+								? Number(c.company_id[0])
+								: null,
+							warehouseId,
+							warehouseCode: warehouseId
+								? (warehouseCodeById.get(warehouseId) ?? null)
+								: null,
+							pickingTypeId: Array.isArray(c.picking_type_id)
+								? Number(c.picking_type_id[0])
+								: null,
+							active: c.active !== false,
+						};
+					},
+				);
+				await upsertPosConfigs(posConfigDimensions);
+				await backfillStoreSourceFields();
+			} catch (dimErr: any) {
+				// Canonical dimension refresh failing must never break the store/
+				// order sync that already succeeded above — log and move on.
+				console.warn(
+					"[syncSales] dim_pos_configs / dim_stores canonical backfill failed (non-fatal):",
+					dimErr.message,
+				);
+			}
 		} else {
-			console.log(
-				"[syncSales] No POS configurations found. Defaulting store mappings.",
+			// No POS configs returned — do NOT fabricate default stores with
+			// invented Odoo IDs (that would silently misattribute future orders
+			// to the wrong store). Fail safe: leave dim_stores exactly as it is;
+			// whatever stores are already known remain known.
+			console.error(
+				"[syncSales] No POS configurations found in Odoo. Skipping store sync this cycle — existing dim_stores rows left untouched (no fabricated defaults).",
 			);
-			const defaultStores: OdooStore[] = [
-				{ id: 1, name: "ZenZebra (Flagship Store)", code: "ZZ" },
-				{ id: 2, name: "KLJ Noida Store", code: "KLJ" },
-				{ id: 3, name: "Smartworks Noida Store", code: "SWN" },
-			];
-			await upsertStores(defaultStores);
 		}
 	} catch (err: any) {
-		console.warn(
-			"[syncSales] POS module config check failed or not installed. Defaulting store mappings. Error:",
+		// Same fail-safe as above: an Odoo API failure must not fabricate
+		// store rows with invented IDs. Existing dim_stores rows (and the
+		// orders that reference them) remain valid; this cycle's store
+		// refresh is simply skipped and retried on the next sync tick.
+		console.error(
+			"[syncSales] POS config query failed — skipping store sync this cycle (no fabricated defaults). Error:",
 			err.message,
 		);
-
-		// Fallback to inserting default ZenZebra stores to ensure foreign keys satisfy POS orders
-		const defaultStores: OdooStore[] = [
-			{ id: 1, name: "ZenZebra (Flagship Store)", code: "ZZ" },
-			{ id: 2, name: "KLJ Noida Store", code: "KLJ" },
-			{ id: 3, name: "Smartworks Noida Store", code: "SWN" },
-		];
-		await upsertStores(defaultStores);
 	}
 
 	let totalOrdersSynced = 0;

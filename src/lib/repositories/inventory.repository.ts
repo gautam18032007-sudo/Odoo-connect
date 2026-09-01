@@ -304,7 +304,7 @@ export async function getFastSlowMovingProducts(filters?: {
 			WHERE updated_at >= NOW() - INTERVAL '30 days'
 			GROUP BY product_id
 		) sl_agg ON sl_agg.product_id = p.id
-		WHERE p.active = true
+		WHERE p.active = true AND p.is_storable IS NOT FALSE
 		  AND (${storeFilter}::TEXT IS NULL OR fi_agg.product_id IS NOT NULL)
 		  AND (${categoryFilter}::TEXT IS NULL OR TRIM(p.category) ILIKE TRIM(${categoryFilter}))
 		  AND (${brandFilter}::TEXT IS NULL OR EXISTS (
@@ -346,7 +346,7 @@ export async function getFastSlowMovingProducts(filters?: {
 			WHERE updated_at >= NOW() - INTERVAL '30 days'
 			GROUP BY product_id
 		) sl_agg ON sl_agg.product_id = p.id
-		WHERE p.active = true AND COALESCE(fi_agg.qty_sum, p.qty_available, 0) > 0
+		WHERE p.active = true AND p.is_storable IS NOT FALSE AND COALESCE(fi_agg.qty_sum, p.qty_available, 0) > 0
 		  AND (${storeFilter}::TEXT IS NULL OR fi_agg.product_id IS NOT NULL)
 		  AND (${categoryFilter}::TEXT IS NULL OR TRIM(p.category) ILIKE TRIM(${categoryFilter}))
 		  AND (${brandFilter}::TEXT IS NULL OR EXISTS (
@@ -454,7 +454,7 @@ export async function getItemVelocityPaged(
 			WHERE updated_at >= NOW() - INTERVAL '30 days'
 			GROUP BY product_id
 		) sl_agg ON sl_agg.product_id = p.id
-		WHERE p.active = true
+		WHERE p.active = true AND p.is_storable IS NOT FALSE
 		  AND ($1 = '' OR p.name ILIKE $2 OR p.default_code ILIKE $2)
 		  AND ($6::text IS NULL OR fi_agg.product_id IS NOT NULL)
 		  AND ($3::text IS NULL OR TRIM(p.category) ILIKE TRIM($3))
@@ -482,7 +482,7 @@ export async function getItemVelocityPaged(
 		LEFT JOIN fact_inventory fi ON p.id = fi.product_id
 		LEFT JOIN dim_stores s ON fi.location_id = s.location_id
 		LEFT JOIN fact_sales_lines sl ON p.id = sl.product_id
-		WHERE p.active = true
+		WHERE p.active = true AND p.is_storable IS NOT FALSE
 		  AND (${search} = '' OR p.name ILIKE ${"%" + search + "%"} OR p.default_code ILIKE ${"%" + search + "%"})
 		  AND (${storeFilter}::TEXT IS NULL OR s.name ILIKE ${storeFilter} OR s.code ILIKE ${storeFilter} OR s.id IN (
 		        SELECT so2.store_id 
@@ -506,32 +506,69 @@ export async function getItemVelocityPaged(
 	};
 }
 
-/**
- * Products requiring automated AI reorder recommendations.
- * Computes target stock directly from 30-day run rate and real SOH without inventing unverified lead time assumptions.
- */
-export async function getReorderRecommendations(filters?: {
+export interface ReorderRecommendationsPagedParams {
+	page: number;
+	pageSize: number;
+	sortBy: "urgency" | "name";
+	sortDir: "asc" | "desc";
+	search?: string;
 	store?: string;
 	category?: string;
 	brand?: string;
-	sku?: string;
-}): Promise<{ items: ReorderRecommendation[]; totalEligibleCount: number }> {
+}
+
+export interface ReorderRecommendationsPagedResult {
+	items: ReorderRecommendation[];
+	totalCount: number;
+	page: number;
+	pageSize: number;
+}
+
+/**
+ * Products eligible for reorder (SOH <= 15), full eligible population,
+ * paginated/sorted/searched — not a fixed top-N. Deterministic arithmetic,
+ * not an AI/ML model: computes target stock from 30-day run rate and real
+ * SOH without inventing unverified lead-time assumptions.
+ */
+export async function getReorderRecommendationsPaged(
+	params: ReorderRecommendationsPagedParams,
+): Promise<ReorderRecommendationsPagedResult> {
+	const page = Math.max(1, params.page);
+	const pageSize = Math.min(100, Math.max(1, params.pageSize));
+	const offset = (page - 1) * pageSize;
+	const search = params.search?.trim() || "";
 	const storeFilter =
-		filters?.store && filters.store !== "ALL" && filters.store !== "All Stores"
-			? filters.store
+		params.store && params.store !== "ALL" && params.store !== "All Stores"
+			? params.store
 			: null;
 	const categoryFilter =
-		filters?.category && filters.category !== "All Categories"
-			? filters.category
+		params.category && params.category !== "All Categories"
+			? params.category
 			: null;
 	const brandFilter =
-		filters?.brand && filters.brand !== "All Brands" ? filters.brand : null;
-	const skuFilter = filters?.sku ? `%${filters.sku.trim()}%` : null;
+		params.brand && params.brand !== "All Brands" ? params.brand : null;
 
-	// fi_agg pre-aggregates stock per product (store-scoped) so eligibility
-	// and display use the same live fact_inventory total, not the separately
-	// -synced (and frequently stale) dim_products.qty_available.
-	const result = await sql`
+	// Same sql.query()-with-whitelist pattern as getItemVelocityPaged (Bug 5) —
+	// this Neon client has no sql.unsafe(), so the ORDER BY column/direction
+	// must come from a fixed whitelist, never unvalidated input.
+	const sortColumn: Record<
+		ReorderRecommendationsPagedParams["sortBy"],
+		string
+	> = {
+		urgency: "qty_available",
+		name: "name",
+	};
+	const orderColumn = sortColumn[params.sortBy] || "qty_available";
+	const orderDir = params.sortDir === "desc" ? "DESC" : "ASC";
+	if (!["qty_available", "name"].includes(orderColumn)) {
+		throw new Error(`Invalid sort column: ${orderColumn}`);
+	}
+	if (orderDir !== "ASC" && orderDir !== "DESC") {
+		throw new Error(`Invalid sort direction: ${orderDir}`);
+	}
+
+	const likeSearch = `%${search}%`;
+	const queryText = `
 		SELECT
 			p.id,
 			p.name,
@@ -544,11 +581,11 @@ export async function getReorderRecommendations(filters?: {
 			SELECT fi.product_id, SUM(fi.quantity) AS qty_sum
 			FROM fact_inventory fi
 			LEFT JOIN dim_stores s ON fi.location_id = s.location_id
-			WHERE (${storeFilter}::TEXT IS NULL OR s.name ILIKE ${storeFilter} OR s.code ILIKE ${storeFilter} OR s.id IN (
+			WHERE ($6::text IS NULL OR s.name ILIKE $6 OR s.code ILIKE $6 OR s.id IN (
 			        SELECT so2.store_id
 			        FROM fact_sales_orders so2
 			        JOIN sales_fact_v sf ON LOWER(TRIM(so2.name)) = LOWER(TRIM(sf.bill_no))
-			        WHERE sf.store_display_name ILIKE ${storeFilter} OR sf.billed_by ILIKE ${storeFilter}
+			        WHERE sf.store_display_name ILIKE $6 OR sf.billed_by ILIKE $6
 			  ))
 			GROUP BY fi.product_id
 		) fi_agg ON fi_agg.product_id = p.id
@@ -558,21 +595,29 @@ export async function getReorderRecommendations(filters?: {
 			WHERE updated_at >= NOW() - INTERVAL '30 days'
 			GROUP BY product_id
 		) sl_agg ON sl_agg.product_id = p.id
-		WHERE p.active = true AND COALESCE(fi_agg.qty_sum, p.qty_available, 0) <= 15
-		  AND (${storeFilter}::TEXT IS NULL OR fi_agg.product_id IS NOT NULL)
-		  AND (${categoryFilter}::TEXT IS NULL OR TRIM(p.category) ILIKE TRIM(${categoryFilter}))
-		  AND (${brandFilter}::TEXT IS NULL OR EXISTS (
+		WHERE p.active = true AND p.is_storable IS NOT FALSE
+		  AND COALESCE(fi_agg.qty_sum, p.qty_available, 0) <= 15
+		  AND ($6::text IS NULL OR fi_agg.product_id IS NOT NULL)
+		  AND ($1 = '' OR p.name ILIKE $2 OR p.default_code ILIKE $2)
+		  AND ($3::text IS NULL OR TRIM(p.category) ILIKE TRIM($3))
+		  AND ($4::text IS NULL OR EXISTS (
 		        SELECT 1 FROM sales_fact sf
-		        WHERE sf.brand ILIKE ${brandFilter}
+		        WHERE sf.brand ILIKE $4
 		          AND (LOWER(TRIM(p.name)) = LOWER(TRIM(sf.item_name)) OR (p.default_code IS NOT NULL AND p.default_code = sf.sku_code) OR (p.barcode IS NOT NULL AND p.barcode = sf.sku_code))
 		  ))
-		  AND (${skuFilter}::TEXT IS NULL OR p.name ILIKE ${skuFilter} OR p.default_code ILIKE ${skuFilter})
-		ORDER BY qty_available ASC
-		LIMIT 10
+		ORDER BY ${orderColumn} ${orderDir}
+		LIMIT $5 OFFSET $7
 	`;
+	const result = await (sql as any).query(queryText, [
+		search,
+		likeSearch,
+		categoryFilter,
+		brandFilter,
+		pageSize,
+		storeFilter,
+		offset,
+	]);
 
-	// Total size of the eligible pool, independent of the LIMIT 10 above —
-	// so the UI can say "Top 10 of N" honestly instead of implying completeness.
 	const countResult = await sql`
 		SELECT COUNT(*) AS total FROM (
 			SELECT p.id
@@ -589,19 +634,20 @@ export async function getReorderRecommendations(filters?: {
 				  ))
 				GROUP BY fi.product_id
 			) fi_agg ON fi_agg.product_id = p.id
-			WHERE p.active = true AND COALESCE(fi_agg.qty_sum, p.qty_available, 0) <= 15
+			WHERE p.active = true AND p.is_storable IS NOT FALSE
+			  AND COALESCE(fi_agg.qty_sum, p.qty_available, 0) <= 15
 			  AND (${storeFilter}::TEXT IS NULL OR fi_agg.product_id IS NOT NULL)
+			  AND (${search} = '' OR p.name ILIKE ${likeSearch} OR p.default_code ILIKE ${likeSearch})
 			  AND (${categoryFilter}::TEXT IS NULL OR TRIM(p.category) ILIKE TRIM(${categoryFilter}))
 			  AND (${brandFilter}::TEXT IS NULL OR EXISTS (
 			        SELECT 1 FROM sales_fact sf
 			        WHERE sf.brand ILIKE ${brandFilter}
 			          AND (LOWER(TRIM(p.name)) = LOWER(TRIM(sf.item_name)) OR (p.default_code IS NOT NULL AND p.default_code = sf.sku_code) OR (p.barcode IS NOT NULL AND p.barcode = sf.sku_code))
 			  ))
-			  AND (${skuFilter}::TEXT IS NULL OR p.name ILIKE ${skuFilter} OR p.default_code ILIKE ${skuFilter})
 		) t
 	`;
 
-	const items = result.map((r) => {
+	const items = result.map((r: any) => {
 		const qty = Number(r.qty_available || 0);
 		const sold30d = Number(r.units_sold_30d || 0);
 		const dailyRate = Math.max(0.5, Number((sold30d / 30).toFixed(1)));
@@ -627,7 +673,12 @@ export async function getReorderRecommendations(filters?: {
 		};
 	});
 
-	return { items, totalEligibleCount: Number(countResult[0]?.total || 0) };
+	return {
+		items,
+		totalCount: Number(countResult[0]?.total || 0),
+		page,
+		pageSize,
+	};
 }
 
 /**
@@ -704,4 +755,153 @@ export async function getStockAgingDistribution(filters?: {
 		totalQuantity: map[range]?.totalQuantity || 0,
 		valuationCost: map[range]?.valuationCost || 0,
 	}));
+}
+
+export interface AbcClassificationItem {
+	productId: number;
+	name: string;
+	sku: string;
+	category: string;
+	revenue: number;
+	revenueSharePct: number;
+	cumulativeSharePct: number;
+	abcClass: "A" | "B" | "C";
+}
+
+export interface AbcClassificationParams {
+	page: number;
+	pageSize: number;
+	search?: string;
+	store?: string;
+	category?: string;
+}
+
+export interface AbcClassificationResult {
+	items: AbcClassificationItem[];
+	totalCount: number;
+	page: number;
+	pageSize: number;
+	summary: {
+		aCount: number;
+		bCount: number;
+		cCount: number;
+		totalRevenue: number;
+		earliestSaleDate: string | null;
+		latestSaleDate: string | null;
+	};
+}
+
+/**
+ * Real Pareto (80/15/5 cumulative-revenue) ABC classification, computed
+ * from Odoo-native data only (dim_products + fact_sales_lines/fact_sales_orders)
+ * — deliberately does not cross into the legacy sales_fact table, since that
+ * would inherit the ~20% product-identity matching gap documented in the
+ * Phase 15 audit. Revenue uses the full available fact_sales_lines history
+ * (currently a few weeks, since this table is comparatively new) rather than
+ * a fixed 30-day window, so classifications reflect everything the Odoo-native
+ * sync has captured so far. Products with zero revenue in that window still
+ * appear (classified C), rather than being silently dropped.
+ */
+export async function getAbcClassification(
+	params: AbcClassificationParams,
+): Promise<AbcClassificationResult> {
+	const page = Math.max(1, params.page);
+	const pageSize = Math.min(100, Math.max(1, params.pageSize));
+	const offset = (page - 1) * pageSize;
+	const search = params.search?.trim() || "";
+	const likeSearch = `%${search}%`;
+	const storeFilter =
+		params.store && params.store !== "ALL" && params.store !== "All Stores"
+			? params.store
+			: null;
+	const categoryFilter =
+		params.category && params.category !== "All Categories"
+			? params.category
+			: null;
+
+	const classified = await sql`
+		WITH revenue_agg AS (
+			SELECT sl.product_id, SUM(sl.price_subtotal) AS revenue
+			FROM fact_sales_lines sl
+			JOIN fact_sales_orders so ON so.id = sl.order_id
+			WHERE (${storeFilter}::TEXT IS NULL OR so.store_id IN (
+			        SELECT id FROM dim_stores WHERE name ILIKE ${storeFilter} OR code ILIKE ${storeFilter}
+			  ))
+			GROUP BY sl.product_id
+		),
+		scoped AS (
+			SELECT
+				p.id,
+				p.name,
+				COALESCE(p.default_code, 'SKU-' || p.id) AS sku,
+				COALESCE(p.category, 'General') AS category,
+				COALESCE(ra.revenue, 0) AS revenue
+			FROM dim_products p
+			LEFT JOIN revenue_agg ra ON ra.product_id = p.id
+			WHERE p.active = true AND p.is_storable IS NOT FALSE
+			  AND (${categoryFilter}::TEXT IS NULL OR TRIM(p.category) ILIKE TRIM(${categoryFilter}))
+			  AND (${search} = '' OR p.name ILIKE ${likeSearch} OR p.default_code ILIKE ${likeSearch})
+		),
+		ranked AS (
+			SELECT
+				*,
+				SUM(revenue) OVER (ORDER BY revenue DESC, id ROWS UNBOUNDED PRECEDING) AS cum_revenue,
+				SUM(revenue) OVER () AS total_revenue,
+				ROW_NUMBER() OVER (ORDER BY revenue DESC, id) AS rn
+			FROM scoped
+		)
+		SELECT
+			id, name, sku, category, revenue, total_revenue, cum_revenue,
+			CASE
+				WHEN total_revenue = 0 THEN 'C'
+				WHEN (cum_revenue::numeric / NULLIF(total_revenue, 0)) <= 0.8 THEN 'A'
+				WHEN (cum_revenue::numeric / NULLIF(total_revenue, 0)) <= 0.95 THEN 'B'
+				ELSE 'C'
+			END AS abc_class
+		FROM ranked
+		ORDER BY revenue DESC, id
+	`;
+
+	const earliestLatest = await sql`
+		SELECT MIN(so.date_order)::text AS earliest, MAX(so.date_order)::text AS latest
+		FROM fact_sales_lines sl
+		JOIN fact_sales_orders so ON so.id = sl.order_id
+	`;
+
+	const totalRevenue = Number(classified[0]?.total_revenue || 0);
+	const aCount = classified.filter((r) => r.abc_class === "A").length;
+	const bCount = classified.filter((r) => r.abc_class === "B").length;
+	const cCount = classified.filter((r) => r.abc_class === "C").length;
+
+	const pageRows = classified.slice(offset, offset + pageSize);
+
+	return {
+		items: pageRows.map((r) => ({
+			productId: Number(r.id),
+			name: String(r.name),
+			sku: String(r.sku),
+			category: String(r.category),
+			revenue: Number(r.revenue || 0),
+			revenueSharePct:
+				totalRevenue > 0
+					? Math.round((Number(r.revenue || 0) / totalRevenue) * 1000) / 10
+					: 0,
+			cumulativeSharePct:
+				totalRevenue > 0
+					? Math.round((Number(r.cum_revenue || 0) / totalRevenue) * 1000) / 10
+					: 0,
+			abcClass: r.abc_class as "A" | "B" | "C",
+		})),
+		totalCount: classified.length,
+		page,
+		pageSize,
+		summary: {
+			aCount,
+			bCount,
+			cCount,
+			totalRevenue,
+			earliestSaleDate: earliestLatest[0]?.earliest || null,
+			latestSaleDate: earliestLatest[0]?.latest || null,
+		},
+	};
 }

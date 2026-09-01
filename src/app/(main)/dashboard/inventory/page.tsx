@@ -101,19 +101,6 @@ interface InventoryDashboardData {
 		turnoverCategory: string;
 		listPrice: number;
 	}>;
-	reorderRecommendations: Array<{
-		productId: number;
-		name: string;
-		sku: string;
-		category: string;
-		qtyOnHand: number;
-		dailyRunRate: number;
-		daysOfSupplyRemaining: number;
-		suggestedReorderQty: number;
-		recommendedVendor: string;
-		urgency: "critical" | "high" | "medium";
-	}>;
-	reorderEligibleCount: number;
 	stockAging: Array<{
 		ageRange: string;
 		itemCount: number;
@@ -140,10 +127,38 @@ interface VelocityItem {
 	listPrice: number;
 }
 
+interface ReorderItem {
+	productId: number;
+	name: string;
+	sku: string;
+	category: string;
+	qtyOnHand: number;
+	dailyRunRate: number;
+	daysOfSupplyRemaining: number;
+	suggestedReorderQty: number;
+	recommendedVendor: string;
+	urgency: "critical" | "high" | "medium";
+}
+
+interface AbcItem {
+	productId: number;
+	name: string;
+	sku: string;
+	category: string;
+	revenue: number;
+	revenueSharePct: number;
+	cumulativeSharePct: number;
+	abcClass: "A" | "B" | "C";
+}
+
 type VelocitySortBy = "sales" | "velocity" | "soh" | "name";
 type VelocitySortDir = "asc" | "desc";
+type ReorderSortBy = "urgency" | "name";
+type ReorderSortDir = "asc" | "desc";
 
 const ALL_PRODUCTS_PAGE_SIZE = 25;
+const REORDER_PAGE_SIZE = 25;
+const ABC_PAGE_SIZE = 25;
 
 // Windowed page-number list for the pagination bar: first, last, current ±1,
 // with ellipses filling the gaps once the catalog spans more than 7 pages.
@@ -273,6 +288,119 @@ export default function ExecutiveInventoryDashboardPage() {
 		};
 	}, [allPage, allSortBy, allSortDir, allSearch, store, category, brand, sku]);
 
+	// Reorder Recommendations — full eligible pool, server-paginated/searched,
+	// not a fixed top-10. Same pattern as the All Products tab above.
+	const [reorderPage, setReorderPage] = useState(1);
+	const [reorderSortBy, setReorderSortBy] = useState<ReorderSortBy>("urgency");
+	const [reorderSortDir, setReorderSortDir] = useState<ReorderSortDir>("asc");
+	const [reorderSearchInput, setReorderSearchInput] = useState("");
+	const [reorderSearch, setReorderSearch] = useState("");
+	const [reorderData, setReorderData] = useState<{
+		items: ReorderItem[];
+		totalCount: number;
+		page: number;
+		pageSize: number;
+	} | null>(null);
+	const [reorderLoading, setReorderLoading] = useState(false);
+
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			setReorderPage(1);
+			setReorderSearch(reorderSearchInput);
+		}, 300);
+		return () => clearTimeout(timer);
+	}, [reorderSearchInput]);
+
+	useEffect(() => {
+		let cancelled = false;
+		setReorderLoading(true);
+		const params = new URLSearchParams({
+			page: String(reorderPage),
+			pageSize: String(REORDER_PAGE_SIZE),
+			sortBy: reorderSortBy,
+			sortDir: reorderSortDir,
+			search: reorderSearch,
+		});
+		if (store !== "ALL") params.set("store", store);
+		if (category !== "All Categories") params.set("category", category);
+		if (brand !== "All Brands") params.set("brand", brand);
+
+		fetch(`/api/inventory/reorder?${params.toString()}`)
+			.then((res) => res.json())
+			.then((json) => {
+				if (cancelled) return;
+				if (json.success) setReorderData(json.data);
+			})
+			.finally(() => {
+				if (!cancelled) setReorderLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		reorderPage,
+		reorderSortBy,
+		reorderSortDir,
+		reorderSearch,
+		store,
+		category,
+		brand,
+	]);
+
+	// ABC Classification — real Pareto (80/15/5 cumulative revenue) computed
+	// from Odoo-native data (dim_products + fact_sales_lines/fact_sales_orders).
+	const [abcPage, setAbcPage] = useState(1);
+	const [abcSearchInput, setAbcSearchInput] = useState("");
+	const [abcSearch, setAbcSearch] = useState("");
+	const [abcData, setAbcData] = useState<{
+		items: AbcItem[];
+		totalCount: number;
+		page: number;
+		pageSize: number;
+		summary: {
+			aCount: number;
+			bCount: number;
+			cCount: number;
+			totalRevenue: number;
+			earliestSaleDate: string | null;
+			latestSaleDate: string | null;
+		};
+	} | null>(null);
+	const [abcLoading, setAbcLoading] = useState(false);
+
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			setAbcPage(1);
+			setAbcSearch(abcSearchInput);
+		}, 300);
+		return () => clearTimeout(timer);
+	}, [abcSearchInput]);
+
+	useEffect(() => {
+		let cancelled = false;
+		setAbcLoading(true);
+		const params = new URLSearchParams({
+			page: String(abcPage),
+			pageSize: String(ABC_PAGE_SIZE),
+			search: abcSearch,
+		});
+		if (store !== "ALL") params.set("store", store);
+		if (category !== "All Categories") params.set("category", category);
+
+		fetch(`/api/inventory/abc?${params.toString()}`)
+			.then((res) => res.json())
+			.then((json) => {
+				if (cancelled) return;
+				if (json.success) setAbcData(json.data);
+			})
+			.finally(() => {
+				if (!cancelled) setAbcLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [abcPage, abcSearch, store, category]);
+
 	const fetcher = async (signal: AbortSignal) => {
 		const params = new URLSearchParams();
 		if (store !== "ALL") params.set("store", store);
@@ -290,10 +418,12 @@ export default function ExecutiveInventoryDashboardPage() {
 		throw new Error(json.error || "Failed to load inventory metrics");
 	};
 
+	const INVENTORY_POLL_INTERVAL_MS = 30000; // 30s retail-safe refresh to optimize Neon compute
+
 	const { data, isInitialLoading, isRefreshing, error, refetch } =
 		useStabilizedDashboard<InventoryDashboardData>({
 			fetcher,
-			refreshInterval: 5000,
+			refreshInterval: INVENTORY_POLL_INTERVAL_MS,
 			dependencies: [store, category, brand, sku],
 		});
 
@@ -339,8 +469,6 @@ export default function ExecutiveInventoryDashboardPage() {
 		storeBreakdown,
 		fastMoving,
 		slowMoving,
-		reorderRecommendations,
-		reorderEligibleCount,
 		stockAging,
 		performance,
 	} = data;
@@ -395,6 +523,35 @@ export default function ExecutiveInventoryDashboardPage() {
 		);
 	}
 
+	const handleReorderSort = (col: ReorderSortBy) => {
+		setReorderPage(1);
+		if (reorderSortBy === col) {
+			setReorderSortDir((d) => (d === "asc" ? "desc" : "asc"));
+		} else {
+			setReorderSortBy(col);
+			setReorderSortDir("asc");
+		}
+	};
+
+	const reorderTotalPages = reorderData
+		? Math.max(1, Math.ceil(reorderData.totalCount / reorderData.pageSize))
+		: 1;
+
+	function ReorderSortIcon({ column }: { column: ReorderSortBy }) {
+		if (reorderSortBy !== column) {
+			return <ArrowUpDown className="size-3 text-muted-foreground/50" />;
+		}
+		return reorderSortDir === "asc" ? (
+			<ArrowUp className="size-3" />
+		) : (
+			<ArrowDown className="size-3" />
+		);
+	}
+
+	const abcTotalPages = abcData
+		? Math.max(1, Math.ceil(abcData.totalCount / abcData.pageSize))
+		: 1;
+
 	return (
 		<div className="flex flex-col gap-6 p-4 pt-4 md:p-8 transition-all">
 			{/* ── Executive Header ────────────────────────────────────────── */}
@@ -442,6 +599,7 @@ export default function ExecutiveInventoryDashboardPage() {
 				availableCategories={status?.availableCategories || []}
 				availableBrands={status?.availableBrands || []}
 				categoryBrandMap={status?.categoryBrandMap || {}}
+				hideDateRange
 				onSearchProducts={async (query) => {
 					const params = new URLSearchParams({ q: query });
 					if (store !== "ALL") params.set("store", store);
@@ -643,7 +801,7 @@ export default function ExecutiveInventoryDashboardPage() {
 					<div>
 						<CardTitle className="flex items-center gap-2 text-base font-semibold">
 							<TrendingUp className="size-5 text-emerald-500" />
-							Operational Item Turnover Velocity (ABC Analysis)
+							Operational Item Turnover Velocity
 						</CardTitle>
 						<CardDescription>
 							Identify high-velocity drivers and slow-moving capital items
@@ -661,10 +819,11 @@ export default function ExecutiveInventoryDashboardPage() {
 				</CardHeader>
 				<CardContent>
 					<Tabs defaultValue="fast" className="w-full">
-						<TabsList className="grid w-full grid-cols-3 max-w-md mb-4">
+						<TabsList className="grid w-full grid-cols-4 max-w-xl mb-4">
 							<TabsTrigger value="fast">Fast Moving (Top 10)</TabsTrigger>
 							<TabsTrigger value="slow">Slow Moving (Top 10)</TabsTrigger>
 							<TabsTrigger value="all">All Products</TabsTrigger>
+							<TabsTrigger value="abc">ABC Classification</TabsTrigger>
 						</TabsList>
 
 						<TabsContent value="fast" className="space-y-3">
@@ -690,18 +849,13 @@ export default function ExecutiveInventoryDashboardPage() {
 														{String(i + 1).padStart(2, "0")}
 													</TableCell>
 													<TableCell className="whitespace-normal">
-														<div className="flex items-center gap-2">
-															<Badge className="bg-emerald-600 text-white text-[10px]">
-																A-ITEM
-															</Badge>
-															<div className="truncate">
-																<p className="font-medium truncate">
-																	{item.name}
-																</p>
-																<p className="text-xs text-muted-foreground font-mono">
-																	{item.sku} • {item.category}
-																</p>
-															</div>
+														<div className="truncate">
+															<p className="font-medium truncate">
+																{item.name}
+															</p>
+															<p className="text-xs text-muted-foreground font-mono">
+																{item.sku} • {item.category}
+															</p>
 														</div>
 													</TableCell>
 													<TableCell className="text-right">
@@ -767,18 +921,13 @@ export default function ExecutiveInventoryDashboardPage() {
 														{String(i + 1).padStart(2, "0")}
 													</TableCell>
 													<TableCell className="whitespace-normal">
-														<div className="flex items-center gap-2">
-															<Badge className="bg-amber-600 text-white text-[10px]">
-																C-ITEM
-															</Badge>
-															<div className="truncate">
-																<p className="font-medium truncate">
-																	{item.name}
-																</p>
-																<p className="text-xs text-muted-foreground font-mono">
-																	{item.sku} • {item.category}
-																</p>
-															</div>
+														<div className="truncate">
+															<p className="font-medium truncate">
+																{item.name}
+															</p>
+															<p className="text-xs text-muted-foreground font-mono">
+																{item.sku} • {item.category}
+															</p>
 														</div>
 													</TableCell>
 													<TableCell className="text-right">
@@ -1008,39 +1157,227 @@ export default function ExecutiveInventoryDashboardPage() {
 								</Pagination>
 							)}
 						</TabsContent>
+
+						<TabsContent value="abc" className="space-y-3">
+							<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-1">
+								<div className="flex flex-wrap items-center gap-2 text-xs">
+									{abcData ? (
+										<>
+											<Badge className="bg-emerald-600 text-white text-[10px]">
+												A: {abcData.summary.aCount}
+											</Badge>
+											<Badge className="bg-amber-600 text-white text-[10px]">
+												B: {abcData.summary.bCount}
+											</Badge>
+											<Badge className="bg-slate-500 text-white text-[10px]">
+												C: {abcData.summary.cCount}
+											</Badge>
+											<span className="text-muted-foreground">
+												Revenue window:{" "}
+												{abcData.summary.earliestSaleDate?.slice(0, 10) ?? "—"}{" "}
+												to {abcData.summary.latestSaleDate?.slice(0, 10) ?? "—"}
+											</span>
+										</>
+									) : (
+										<span className="text-muted-foreground">Loading…</span>
+									)}
+								</div>
+								<div className="relative w-full sm:w-64">
+									<Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+									<Input
+										placeholder="Search products..."
+										value={abcSearchInput}
+										onChange={(e) => setAbcSearchInput(e.target.value)}
+										className="pl-9 h-9 text-xs"
+									/>
+								</div>
+							</div>
+							<p className="text-xs text-muted-foreground">
+								Pareto classification (A = top 80% cumulative revenue, B = next
+								15%, C = remaining 5%) from Odoo-native sales history only —
+								does not cross into the legacy Excel sales data, so
+								classifications reflect only the window shown above.
+							</p>
+
+							<div className="rounded-md border">
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead className="w-10">CLASS</TableHead>
+											<TableHead>PRODUCT / SKU</TableHead>
+											<TableHead className="text-right">REVENUE</TableHead>
+											<TableHead className="text-right">SHARE</TableHead>
+											<TableHead className="text-right">CUMULATIVE</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{abcLoading && !abcData ? (
+											<TableRow>
+												<TableCell colSpan={5} className="text-center py-8">
+													<Skeleton className="h-6 w-full" />
+												</TableCell>
+											</TableRow>
+										) : abcData && abcData.items.length === 0 ? (
+											<TableRow>
+												<TableCell colSpan={5} className="py-8">
+													<Empty>
+														<EmptyTitle>No products found</EmptyTitle>
+														<EmptyDescription>
+															No SKUs match "{abcSearch}".
+														</EmptyDescription>
+													</Empty>
+												</TableCell>
+											</TableRow>
+										) : (
+											abcData?.items.map((item) => (
+												<TableRow key={item.productId}>
+													<TableCell>
+														<Badge
+															className={
+																item.abcClass === "A"
+																	? "bg-emerald-600 text-white text-[10px]"
+																	: item.abcClass === "B"
+																		? "bg-amber-600 text-white text-[10px]"
+																		: "bg-slate-500 text-white text-[10px]"
+															}
+														>
+															{item.abcClass}
+														</Badge>
+													</TableCell>
+													<TableCell className="whitespace-normal">
+														<div className="truncate">
+															<p className="font-medium truncate">
+																{item.name}
+															</p>
+															<p className="text-xs text-muted-foreground font-mono">
+																{item.sku} • {item.category}
+															</p>
+														</div>
+													</TableCell>
+													<TableCell className="text-right font-mono font-bold">
+														{formatCurrency(item.revenue)}
+													</TableCell>
+													<TableCell className="text-right font-mono text-xs">
+														{item.revenueSharePct}%
+													</TableCell>
+													<TableCell className="text-right font-mono text-xs text-muted-foreground">
+														{item.cumulativeSharePct}%
+													</TableCell>
+												</TableRow>
+											))
+										)}
+									</TableBody>
+								</Table>
+							</div>
+
+							{abcData && abcTotalPages > 1 && (
+								<Pagination>
+									<PaginationContent>
+										<PaginationItem>
+											<PaginationPrevious
+												href="#"
+												onClick={(e) => {
+													e.preventDefault();
+													setAbcPage((p) => Math.max(1, p - 1));
+												}}
+												className={
+													abcPage <= 1 ? "pointer-events-none opacity-50" : ""
+												}
+											/>
+										</PaginationItem>
+										{getPageNumbers(abcPage, abcTotalPages).map((p, idx) =>
+											p === "ellipsis" ? (
+												// biome-ignore lint/suspicious/noArrayIndexKey: ellipsis markers carry no identity; there are at most two per render and their position is stable for a given abcPage/abcTotalPages pair.
+												<PaginationItem key={`abc-ellipsis-${idx}`}>
+													<PaginationEllipsis />
+												</PaginationItem>
+											) : (
+												<PaginationItem key={p}>
+													<PaginationLink
+														href="#"
+														isActive={p === abcPage}
+														onClick={(e) => {
+															e.preventDefault();
+															setAbcPage(p);
+														}}
+													>
+														{p}
+													</PaginationLink>
+												</PaginationItem>
+											),
+										)}
+										<PaginationItem>
+											<PaginationNext
+												href="#"
+												onClick={(e) => {
+													e.preventDefault();
+													setAbcPage((p) => Math.min(abcTotalPages, p + 1));
+												}}
+												className={
+													abcPage >= abcTotalPages
+														? "pointer-events-none opacity-50"
+														: ""
+												}
+											/>
+										</PaginationItem>
+									</PaginationContent>
+								</Pagination>
+							)}
+						</TabsContent>
 					</Tabs>
 				</CardContent>
 			</Card>
 
-			{/* ── AI Automated Reorder & Replenishment Recommendations ──── */}
+			{/* ── Reorder Recommendations — full eligible pool, paginated/searchable ── */}
 			<Card className="border-l-4 border-l-violet-500 shadow-sm">
-				<CardHeader>
-					<div className="flex items-center justify-between">
-						<div>
-							<CardTitle className="flex items-center gap-2 text-violet-700 dark:text-violet-400 text-base font-semibold">
-								<Zap className="size-5" />
-								Top 10 AI Reorder Recommendations
-							</CardTitle>
-							<CardDescription>
-								Calculated from 30-day velocity and current stock-on-hand.
-								Showing the {reorderRecommendations.length} most urgent of{" "}
-								{reorderEligibleCount.toLocaleString()} products eligible for
-								reorder — not the full list.
-							</CardDescription>
-						</div>
-						<Badge className="bg-violet-600 text-white font-mono">
-							Top {reorderRecommendations.length} of{" "}
-							{reorderEligibleCount.toLocaleString()}
-						</Badge>
+				<CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+					<div>
+						<CardTitle className="flex items-center gap-2 text-violet-700 dark:text-violet-400 text-base font-semibold">
+							<Zap className="size-5" />
+							Reorder Recommendations
+						</CardTitle>
+						<CardDescription>
+							Deterministic calculation from 30-day run rate and current
+							stock-on-hand (stock ≤15 units) —{" "}
+							{reorderData
+								? `${reorderData.totalCount.toLocaleString()} products eligible`
+								: "loading…"}
+							, fully searchable and paginated below.
+						</CardDescription>
+					</div>
+					<div className="relative w-full md:w-64">
+						<Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+						<Input
+							placeholder="Search SKU or Product..."
+							value={reorderSearchInput}
+							onChange={(e) => setReorderSearchInput(e.target.value)}
+							className="pl-9 h-9 text-xs"
+						/>
 					</div>
 				</CardHeader>
-				<CardContent>
+				<CardContent className="space-y-3">
 					<div className="rounded-md border">
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>PRODUCT / SKU</TableHead>
-									<TableHead className="text-center">SOH QTY</TableHead>
+									<TableHead>
+										<button
+											type="button"
+											onClick={() => handleReorderSort("name")}
+											className="flex items-center gap-1 hover:text-foreground"
+										>
+											PRODUCT / SKU <ReorderSortIcon column="name" />
+										</button>
+									</TableHead>
+									<TableHead className="text-center">
+										<button
+											type="button"
+											onClick={() => handleReorderSort("urgency")}
+											className="flex items-center gap-1 mx-auto hover:text-foreground"
+										>
+											SOH QTY <ReorderSortIcon column="urgency" />
+										</button>
+									</TableHead>
 									<TableHead className="text-center">DAILY RUN RATE</TableHead>
 									<TableHead className="text-center">DAYS REMAINING</TableHead>
 									<TableHead className="text-right">
@@ -1049,20 +1386,30 @@ export default function ExecutiveInventoryDashboardPage() {
 								</TableRow>
 							</TableHeader>
 							<TableBody>
-								{reorderRecommendations.length === 0 ? (
+								{reorderLoading && !reorderData ? (
+									<TableRow>
+										<TableCell colSpan={5} className="text-center py-8">
+											<Skeleton className="h-6 w-full" />
+										</TableCell>
+									</TableRow>
+								) : reorderData && reorderData.items.length === 0 ? (
 									<TableRow>
 										<TableCell colSpan={5} className="py-8">
 											<Empty>
 												<EmptyTitle>No reorder candidates</EmptyTitle>
 												<EmptyDescription>
 													No products in the current filter match the reorder
-													criteria (stock ≤15 units).
+													criteria (stock ≤15 units)
+													{reorderSearch
+														? ` and search "${reorderSearch}"`
+														: ""}
+													.
 												</EmptyDescription>
 											</Empty>
 										</TableCell>
 									</TableRow>
 								) : (
-									reorderRecommendations.map((rec) => (
+									reorderData?.items.map((rec) => (
 										<TableRow key={rec.productId}>
 											<TableCell className="whitespace-normal">
 												<div className="flex items-center gap-2">
@@ -1103,6 +1450,60 @@ export default function ExecutiveInventoryDashboardPage() {
 							</TableBody>
 						</Table>
 					</div>
+
+					{reorderData && reorderTotalPages > 1 && (
+						<Pagination>
+							<PaginationContent>
+								<PaginationItem>
+									<PaginationPrevious
+										href="#"
+										onClick={(e) => {
+											e.preventDefault();
+											setReorderPage((p) => Math.max(1, p - 1));
+										}}
+										className={
+											reorderPage <= 1 ? "pointer-events-none opacity-50" : ""
+										}
+									/>
+								</PaginationItem>
+								{getPageNumbers(reorderPage, reorderTotalPages).map((p, idx) =>
+									p === "ellipsis" ? (
+										// biome-ignore lint/suspicious/noArrayIndexKey: ellipsis markers carry no identity; there are at most two per render and their position is stable for a given reorderPage/reorderTotalPages pair.
+										<PaginationItem key={`reorder-ellipsis-${idx}`}>
+											<PaginationEllipsis />
+										</PaginationItem>
+									) : (
+										<PaginationItem key={p}>
+											<PaginationLink
+												href="#"
+												isActive={p === reorderPage}
+												onClick={(e) => {
+													e.preventDefault();
+													setReorderPage(p);
+												}}
+											>
+												{p}
+											</PaginationLink>
+										</PaginationItem>
+									),
+								)}
+								<PaginationItem>
+									<PaginationNext
+										href="#"
+										onClick={(e) => {
+											e.preventDefault();
+											setReorderPage((p) => Math.min(reorderTotalPages, p + 1));
+										}}
+										className={
+											reorderPage >= reorderTotalPages
+												? "pointer-events-none opacity-50"
+												: ""
+										}
+									/>
+								</PaginationItem>
+							</PaginationContent>
+						</Pagination>
+					)}
 				</CardContent>
 			</Card>
 		</div>

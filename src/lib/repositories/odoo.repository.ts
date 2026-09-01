@@ -294,6 +294,31 @@ export async function getLastSyncTime(
 	return result[0]?.completed_at || null;
 }
 
+export async function getAllLastSyncTimes(): Promise<
+	Record<string, string | null>
+> {
+	const map: Record<string, string | null> = {
+		products: null,
+		customers: null,
+		inventory: null,
+		sales_orders: null,
+	};
+	try {
+		const rows = await sql`
+			SELECT sync_type, MAX(completed_at)::text AS completed_at
+			FROM sync_telemetry
+			WHERE status = 'success'
+			GROUP BY sync_type
+		`;
+		for (const row of rows) {
+			map[String(row.sync_type)] = row.completed_at || null;
+		}
+	} catch {
+		// Fallback for uninitialized table
+	}
+	return map;
+}
+
 export interface Phase3TelemetryExtra {
 	traceId?: string;
 	workerId?: string;

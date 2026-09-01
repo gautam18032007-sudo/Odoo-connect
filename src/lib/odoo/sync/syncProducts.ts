@@ -2,6 +2,11 @@ import {
 	type OdooProduct,
 	upsertProducts,
 } from "../../repositories/odoo.repository";
+import {
+	type OdooCategoryDimension,
+	upsertCategories,
+	upsertProductCategoryLinks,
+} from "../../repositories/odoo-dimensions.repository";
 import { formatDateTimeForOdoo, type OdooClient } from "../client";
 
 /**
@@ -81,6 +86,37 @@ export async function syncProducts(
 
 		await upsertProducts(productsToUpsert);
 		totalUpserted += productsToUpsert.length;
+
+		// Phase 4: link dim_products.category_id to the real Odoo category ID
+		// (categ_id[0]) rather than the name-matching backfill used in Phase 3.
+		// Self-heals dim_product_categories if Odoo has a category not yet
+		// synced (e.g. one created after the last full dimension sync).
+		try {
+			const categoriesSeen = new Map<number, string>();
+			const links: { productId: number; categoryId: number }[] = [];
+			for (const rec of records) {
+				if (!Array.isArray(rec.categ_id)) continue;
+				const categoryId = Number(rec.categ_id[0]);
+				categoriesSeen.set(categoryId, String(rec.categ_id[1]));
+				links.push({ productId: Number(rec.id), categoryId });
+			}
+			if (categoriesSeen.size > 0) {
+				const categoryDimensions: OdooCategoryDimension[] = [
+					...categoriesSeen.entries(),
+				].map(([id, rawName]) => ({ id, rawName, parentCategoryId: null }));
+				await upsertCategories(categoryDimensions);
+			}
+			if (links.length > 0) {
+				await upsertProductCategoryLinks(links);
+			}
+		} catch (categErr: any) {
+			// Category linkage is additive metadata — must never break the
+			// product sync that already succeeded above.
+			console.warn(
+				"[syncProducts] category_id linkage failed (non-fatal):",
+				categErr.message,
+			);
+		}
 
 		if (records.length < limit) {
 			hasMore = false;

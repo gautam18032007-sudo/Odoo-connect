@@ -1,6 +1,6 @@
 import * as os from "node:os";
 import {
-	getLastSyncTime,
+	getAllLastSyncTimes,
 	upsertWorkerHeartbeat,
 } from "../../repositories/odoo.repository";
 import { OdooClient } from "../client";
@@ -112,13 +112,8 @@ export class AlwaysOnSyncWorker {
 				// Re-authenticate if session lost
 				await this.client.authenticate();
 
-				// Get timestamps per entity
-				const lastSyncMap: Record<string, string | null> = {
-					products: await getLastSyncTime("products"),
-					customers: await getLastSyncTime("customers"),
-					inventory: await getLastSyncTime("inventory"),
-					sales_orders: await getLastSyncTime("sales_orders"),
-				};
+				// Get timestamps per entity in a single grouped query
+				const lastSyncMap = await getAllLastSyncTimes();
 
 				// Enqueue jobs in foreign key order
 				this.queueManager.enqueueBatch(lastSyncMap);
