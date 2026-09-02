@@ -67,7 +67,7 @@ async function fetchWindow(
         (${CUSTOMER_IDENTITY_KEY_SQL}) AS ck,
         (${IS_IDENTIFIED_SQL}) AS is_identified,
         sale_date,
-        bill_no,
+        order_id,
         net_amount
       FROM sales_fact_v
       WHERE ($3::text IS NULL OR billed_by = $3)
@@ -81,30 +81,30 @@ async function fetchWindow(
       GROUP BY ck
     ),
     period AS (
-      SELECT s.ck, s.is_identified, s.bill_no, s.net_amount, fp.first_date
+      SELECT s.ck, s.is_identified, s.order_id, s.net_amount, fp.first_date
       FROM scoped s
       JOIN first_purchase fp ON fp.ck = s.ck
       WHERE s.sale_date BETWEEN $1::date AND $2::date
     )
     SELECT
       COALESCE(SUM(net_amount), 0) AS revenue,
-      COUNT(DISTINCT bill_no) AS bills,
+      COUNT(DISTINCT order_id) AS bills,
       COUNT(DISTINCT ck) AS customers,
 
       COALESCE(SUM(net_amount) FILTER (WHERE first_date BETWEEN $1::date AND $2::date), 0) AS new_revenue,
-      COUNT(DISTINCT bill_no) FILTER (WHERE first_date BETWEEN $1::date AND $2::date) AS new_bills,
+      COUNT(DISTINCT order_id) FILTER (WHERE first_date BETWEEN $1::date AND $2::date) AS new_bills,
       COUNT(DISTINCT ck) FILTER (WHERE first_date BETWEEN $1::date AND $2::date) AS new_customers,
 
       COALESCE(SUM(net_amount) FILTER (WHERE first_date < $1::date), 0) AS repeat_revenue,
-      COUNT(DISTINCT bill_no) FILTER (WHERE first_date < $1::date) AS repeat_bills,
+      COUNT(DISTINCT order_id) FILTER (WHERE first_date < $1::date) AS repeat_bills,
       COUNT(DISTINCT ck) FILTER (WHERE first_date < $1::date) AS repeat_customers,
 
       COALESCE(SUM(net_amount) FILTER (WHERE is_identified), 0) AS identified_revenue,
-      COUNT(DISTINCT bill_no) FILTER (WHERE is_identified) AS identified_bills,
+      COUNT(DISTINCT order_id) FILTER (WHERE is_identified) AS identified_bills,
       COUNT(DISTINCT ck) FILTER (WHERE is_identified) AS identified_customers,
 
       COALESCE(SUM(net_amount) FILTER (WHERE NOT is_identified), 0) AS anon_revenue,
-      COUNT(DISTINCT bill_no) FILTER (WHERE NOT is_identified) AS anon_bills,
+      COUNT(DISTINCT order_id) FILTER (WHERE NOT is_identified) AS anon_bills,
       COUNT(DISTINCT ck) FILTER (WHERE NOT is_identified) AS anon_customers
     FROM period`;
 

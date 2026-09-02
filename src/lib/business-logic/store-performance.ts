@@ -76,7 +76,7 @@ export async function getStorePerformance(
 	const queryString = `
     WITH curr AS (
       SELECT store_display_name, billed_by, SUM(net_amount) AS revenue,
-        COUNT(DISTINCT bill_no) AS bill_cuts, SUM(quantity) AS units
+        COUNT(DISTINCT order_id) AS bill_cuts, SUM(quantity) AS units
       FROM sales_fact_v
       WHERE sale_date >= $1::date AND sale_date <= $2::date
         AND ($3::text IS NULL OR billed_by = $3)
@@ -88,7 +88,7 @@ export async function getStorePerformance(
     ),
     prev AS (
       SELECT store_display_name, billed_by, SUM(net_amount) AS revenue,
-        COUNT(DISTINCT bill_no) AS bill_cuts, SUM(quantity) AS units
+        COUNT(DISTINCT order_id) AS bill_cuts, SUM(quantity) AS units
       FROM sales_fact_v
       WHERE sale_date >= $8::date AND sale_date <= $9::date
         AND ($3::text IS NULL OR billed_by = $3)
@@ -352,7 +352,7 @@ export async function getStoreAovBillsHistory(
 
 	const queryString = `
 		WITH curr AS (
-			SELECT billed_by, SUM(net_amount) AS revenue, COUNT(DISTINCT bill_no) AS bills
+			SELECT billed_by, SUM(net_amount) AS revenue, COUNT(DISTINCT order_id) AS bills
 			FROM sales_fact_v
 			WHERE sale_date >= $1::date AND sale_date <= $2::date
 				AND ($7::text IS NULL OR billed_by = $7)
@@ -363,7 +363,7 @@ export async function getStoreAovBillsHistory(
 			GROUP BY billed_by
 		),
 		prev AS (
-			SELECT billed_by, SUM(net_amount) AS revenue, COUNT(DISTINCT bill_no) AS bills
+			SELECT billed_by, SUM(net_amount) AS revenue, COUNT(DISTINCT order_id) AS bills
 			FROM sales_fact_v
 			WHERE sale_date >= $3::date AND sale_date <= $4::date
 				AND ($7::text IS NULL OR billed_by = $7)
@@ -374,7 +374,7 @@ export async function getStoreAovBillsHistory(
 			GROUP BY billed_by
 		),
 		prev_prev AS (
-			SELECT billed_by, SUM(net_amount) AS revenue, COUNT(DISTINCT bill_no) AS bills
+			SELECT billed_by, SUM(net_amount) AS revenue, COUNT(DISTINCT order_id) AS bills
 			FROM sales_fact_v
 			WHERE sale_date >= $5::date AND sale_date <= $6::date
 				AND ($7::text IS NULL OR billed_by = $7)

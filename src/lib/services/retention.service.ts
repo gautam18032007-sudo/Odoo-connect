@@ -42,13 +42,13 @@ export async function getRetentionOverview(
         AND ($3::text IS NULL OR billed_by = $3)
         AND ($4::text[] IS NULL OR category <> ALL($4::text[]))
       GROUP BY customer_mobile
-      HAVING COUNT(DISTINCT bill_no) > 1
+      HAVING COUNT(DISTINCT order_id) > 1
     ) x
   `;
 
 	const revenueQuery = `
     SELECT COALESCE(SUM(net_amount), 0)::numeric AS revenue,
-      COUNT(DISTINCT bill_no)::integer AS orders
+      COUNT(DISTINCT order_id)::integer AS orders
     FROM sales_fact_v
     WHERE sale_date BETWEEN $1::date AND $2::date
       AND ($3::text IS NULL OR billed_by = $3)
@@ -127,12 +127,21 @@ export async function getRetentionOverview(
 	);
 
 	const targetStore = store || "All Stores";
-	const spendRows = await db`
-		SELECT monthly_spend 
-		FROM dim_marketing_spend 
-		WHERE store_display_name ILIKE ${`%${targetStore}%`} 
-		LIMIT 1
-	`;
+	// dim_marketing_spend has no real business data source yet on this DB — the
+	// code already treats "no matching row" as monthlySpend=0 (see below), so a
+	// missing table degrades to that same, already-designed-for state instead of
+	// crashing the endpoint.
+	let spendRows: Record<string, unknown>[] = [];
+	try {
+		spendRows = await db`
+			SELECT monthly_spend
+			FROM dim_marketing_spend
+			WHERE store_display_name ILIKE ${`%${targetStore}%`}
+			LIMIT 1
+		`;
+	} catch {
+		spendRows = [];
+	}
 	const monthlySpend =
 		spendRows.length > 0 ? Number(spendRows[0].monthly_spend) : 0;
 	const currentSpend = Math.round((monthlySpend / 30) * days);
@@ -322,12 +331,12 @@ export async function getCustomerSegments(
 	const stdDevQuery = `
 		SELECT COALESCE(STDDEV_SAMP(bill_amount), 0)::numeric AS aov_stddev
 		FROM (
-			SELECT bill_no, SUM(net_amount) AS bill_amount
+			SELECT order_id, SUM(net_amount) AS bill_amount
 			FROM sales_fact_v
 			WHERE customer_mobile IS NOT NULL AND customer_mobile <> ''
 				AND ($1::text IS NULL OR billed_by = $1)
 				AND ($2::text[] IS NULL OR category <> ALL($2::text[]))
-			GROUP BY bill_no
+			GROUP BY order_id
 		) x
 	`;
 
@@ -340,7 +349,7 @@ export async function getCustomerSegments(
 		SELECT
 			COUNT(DISTINCT sf.customer_mobile)::integer AS customers_count,
 			COALESCE(SUM(sf.net_amount), 0)::numeric AS revenue,
-			COUNT(DISTINCT sf.bill_no)::integer AS orders_count
+			COUNT(DISTINCT sf.order_id)::integer AS orders_count
 		FROM sales_fact_v sf
 		JOIN new_cust nc ON sf.customer_mobile = nc.customer_mobile
 		WHERE sf.sale_date BETWEEN $1::date AND $2::date
@@ -357,7 +366,7 @@ export async function getCustomerSegments(
 		SELECT
 			COUNT(DISTINCT sf.customer_mobile)::integer AS customers_count,
 			COALESCE(SUM(sf.net_amount), 0)::numeric AS revenue,
-			COUNT(DISTINCT sf.bill_no)::integer AS orders_count
+			COUNT(DISTINCT sf.order_id)::integer AS orders_count
 		FROM sales_fact_v sf
 		JOIN ret_cust rc ON sf.customer_mobile = rc.customer_mobile
 		WHERE sf.sale_date BETWEEN $1::date AND $2::date
@@ -400,12 +409,21 @@ export async function getCustomerSegments(
 		Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
 	);
 	const targetStore = store || "All Stores";
-	const spendRows = await db`
-		SELECT monthly_spend 
-		FROM dim_marketing_spend 
-		WHERE store_display_name ILIKE ${`%${targetStore}%`} 
-		LIMIT 1
-	`;
+	// dim_marketing_spend has no real business data source yet on this DB — the
+	// code already treats "no matching row" as monthlySpend=0 (see below), so a
+	// missing table degrades to that same, already-designed-for state instead of
+	// crashing the endpoint.
+	let spendRows: Record<string, unknown>[] = [];
+	try {
+		spendRows = await db`
+			SELECT monthly_spend
+			FROM dim_marketing_spend
+			WHERE store_display_name ILIKE ${`%${targetStore}%`}
+			LIMIT 1
+		`;
+	} catch {
+		spendRows = [];
+	}
 	const monthlySpend =
 		spendRows.length > 0 ? Number(spendRows[0].monthly_spend) : 0;
 	const spend = Math.round((monthlySpend / 30) * days);
@@ -452,7 +470,7 @@ export async function getCustomerHealth(
 				customer_mobile,
 				MAX(sale_date) AS last_purchase_date,
 				MIN(sale_date) AS first_purchase_date,
-				COUNT(DISTINCT bill_no) AS total_orders,
+				COUNT(DISTINCT order_id) AS total_orders,
 				SUM(net_amount) AS total_revenue,
 				PERCENT_RANK() OVER (ORDER BY SUM(net_amount) DESC) AS spend_percentile
 			FROM sales_fact_v
@@ -549,7 +567,7 @@ export async function getCustomerHealthList(
 				COALESCE(MAX(customer_name), 'Valued Customer') AS customer_name,
 				MAX(sale_date) AS last_purchase_date,
 				MIN(sale_date) AS first_purchase_date,
-				COUNT(DISTINCT bill_no) AS total_orders,
+				COUNT(DISTINCT order_id) AS total_orders,
 				SUM(net_amount) AS total_revenue,
 				PERCENT_RANK() OVER (ORDER BY SUM(net_amount) DESC) AS spend_percentile
 			FROM sales_fact_v

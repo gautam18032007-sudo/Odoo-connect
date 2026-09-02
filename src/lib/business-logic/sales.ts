@@ -98,7 +98,7 @@ export async function getDailyHealthMetrics(
           AND ($6::text IS NULL OR (sku_code ILIKE '%' || $6 || '%' OR item_name ILIKE '%' || $6 || '%'))
           AND ($7::text[] IS NULL OR category <> ALL($7::text[]))
         GROUP BY customer_mobile
-        HAVING COUNT(DISTINCT bill_no) > 1
+        HAVING COUNT(DISTINCT order_id) > 1
       ) repeat_mobiles`,
 			[
 				periods.currentStart,

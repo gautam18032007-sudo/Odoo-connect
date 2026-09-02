@@ -25,9 +25,9 @@ export async function GET() {
 		const [freshness] = await sql`
       SELECT MAX(sale_date)::text AS latest_sale_date,
         COUNT(*)::int AS total_rows,
-        COUNT(DISTINCT bill_no)::int AS total_bills,
+        COUNT(DISTINCT order_id)::int AS total_bills,
         COALESCE(SUM(net_amount), 0) AS total_revenue
-      FROM sales_fact`;
+      FROM sales_fact_v`;
 		const [upload] = await sql`
       SELECT MAX(uploaded_at)::text AS last_uploaded_at
       FROM upload_batches WHERE status = 'success'`;
@@ -47,7 +47,7 @@ export async function GET() {
 			"sale_date >= (SELECT MAX(sale_date) - 30 FROM sales_fact_v)";
 		const salesMs = await probe(() =>
 			sql.query(
-				`SELECT SUM(net_amount), COUNT(DISTINCT bill_no) FROM sales_fact_v WHERE ${window}`,
+				`SELECT SUM(net_amount), COUNT(DISTINCT order_id) FROM sales_fact_v WHERE ${window}`,
 			),
 		);
 		const storeMs = await probe(() =>

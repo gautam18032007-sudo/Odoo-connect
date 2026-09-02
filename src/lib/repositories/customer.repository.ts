@@ -64,7 +64,7 @@ export const customerRepository = {
 		const query = `
       SELECT 
         COALESCE(SUM(net_amount), 0)::numeric AS total_revenue,
-        COUNT(DISTINCT bill_no)::integer AS total_bills
+        COUNT(DISTINCT order_id)::integer AS total_bills
       FROM sales_fact_v
       WHERE ($1::text IS NULL OR billed_by = $1)
         AND (sale_date BETWEEN $2::date AND $3::date)
@@ -85,8 +85,8 @@ export const customerRepository = {
         SELECT 
           (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
           net_amount,
-          ROW_NUMBER() OVER(PARTITION BY (${CUSTOMER_IDENTITY_KEY_SQL}) ORDER BY sale_date ASC, bill_no ASC) as rn_asc,
-          ROW_NUMBER() OVER(PARTITION BY (${CUSTOMER_IDENTITY_KEY_SQL}) ORDER BY sale_date DESC, bill_no DESC) as rn_desc
+          ROW_NUMBER() OVER(PARTITION BY (${CUSTOMER_IDENTITY_KEY_SQL}) ORDER BY sale_date ASC, order_id ASC) as rn_asc,
+          ROW_NUMBER() OVER(PARTITION BY (${CUSTOMER_IDENTITY_KEY_SQL}) ORDER BY sale_date DESC, order_id DESC) as rn_desc
         FROM sales_fact_v
         WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
           AND ($1::text IS NULL OR billed_by = $1)
@@ -180,7 +180,7 @@ export const customerRepository = {
         SELECT 
           (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
           net_amount,
-          ROW_NUMBER() OVER(PARTITION BY (${CUSTOMER_IDENTITY_KEY_SQL}) ORDER BY sale_date ASC, bill_no ASC) as order_num
+          ROW_NUMBER() OVER(PARTITION BY (${CUSTOMER_IDENTITY_KEY_SQL}) ORDER BY sale_date ASC, order_id ASC) as order_num
         FROM sales_fact_v
         WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
           AND ($1::text IS NULL OR billed_by = $1)

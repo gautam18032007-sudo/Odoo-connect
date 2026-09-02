@@ -131,27 +131,60 @@ export class OdooClient {
 			await this.authenticate();
 		}
 
+		// A single request must never be able to hang the calling job forever
+		// (this was a confirmed structural gap — see
+		// docs/ODOO_SOURCE_OF_TRUTH_AUDIT.md's forensic audit — the previous
+		// bare fetch() here had no bound at all). This timeout is per-request,
+		// not per-job: a job making many paginated calls (e.g. a 39-minute
+		// historical sales backfill) is expected and fine — each individual
+		// call just can't silently hang past ODOO_REQUEST_TIMEOUT_MS.
+		const timeoutMs = Number(process.env.ODOO_REQUEST_TIMEOUT_MS) || 60_000;
+		const traceId = `okw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
 		const executeCall = async () => {
-			const response = await fetch(`${this.url}/web/dataset/call_kw`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Cookie: `session_id=${this.session?.sessionId}`,
-				},
-				body: JSON.stringify({
-					jsonrpc: "2.0",
-					method: "call",
-					params: {
-						model,
-						method,
-						args,
-						kwargs: {
-							context: this.session?.userContext,
-							...kwargs,
-						},
+			const startedAt = Date.now();
+			const controller = new AbortController();
+			const timer = setTimeout(() => controller.abort(), timeoutMs);
+			let response: Response;
+			try {
+				response = await fetch(`${this.url}/web/dataset/call_kw`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Cookie: `session_id=${this.session?.sessionId}`,
 					},
-				}),
-			});
+					body: JSON.stringify({
+						jsonrpc: "2.0",
+						method: "call",
+						params: {
+							model,
+							method,
+							args,
+							kwargs: {
+								context: this.session?.userContext,
+								...kwargs,
+							},
+						},
+					}),
+					signal: controller.signal,
+				});
+			} catch (err: any) {
+				const elapsedMs = Date.now() - startedAt;
+				if (err.name === "AbortError") {
+					console.error(
+						`[OdooClient] TIMEOUT trace_id=${traceId} model=${model} method=${method} elapsed_ms=${elapsedMs} timeout_ms=${timeoutMs} error_type=timeout`,
+					);
+					throw new Error(
+						`Odoo request timed out after ${timeoutMs}ms [${model}.${method}]`,
+					);
+				}
+				console.error(
+					`[OdooClient] NETWORK_ERROR trace_id=${traceId} model=${model} method=${method} elapsed_ms=${elapsedMs} error_type=network message=${err.message}`,
+				);
+				throw err;
+			} finally {
+				clearTimeout(timer);
+			}
 
 			if (response.status === 401) {
 				throw new Error("SESSION_EXPIRED");

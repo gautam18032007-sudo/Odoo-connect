@@ -52,7 +52,7 @@ export async function getCacMetrics(
     SELECT 
       COUNT(DISTINCT sf.customer_mobile)::integer AS count,
       COALESCE(SUM(sf.net_amount), 0)::numeric AS revenue,
-      COUNT(DISTINCT sf.bill_no)::integer AS orders
+      COUNT(DISTINCT sf.order_id)::integer AS orders
     FROM sales_fact_v sf
     JOIN customer_metrics cm ON sf.customer_mobile = cm.customer_mobile
     WHERE cm.first_purchase_date BETWEEN $1::date AND $2::date

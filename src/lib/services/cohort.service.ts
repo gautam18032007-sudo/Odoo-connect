@@ -34,8 +34,7 @@ export async function getCohortMetrics(
       SELECT
         (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
         MIN(sale_date) AS first_date,
-        MIN(bill_no) AS first_bill_no,
-        COUNT(DISTINCT bill_no) AS total_orders
+        COUNT(DISTINCT order_id) AS total_orders
       FROM sales_fact_v
       WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
         AND ($1::date IS NULL OR sale_date <= $1::date)
@@ -45,13 +44,35 @@ export async function getCohortMetrics(
         AND ($5::text IS NULL OR brand = $5)
       GROUP BY (${CUSTOMER_IDENTITY_KEY_SQL})
     ),
+    -- Deterministic true-first-order selection. bill_no is NOT chronologically
+    -- sortable (Odoo's per-session order numbering resets, so a customer's
+    -- first visit can get a lexically-"later" bill_no than a subsequent
+    -- visit at a different store) — confirmed live: MIN(bill_no) picked the
+    -- wrong order for 95/713 customers (13.3%). sale_date ASC, order_id ASC
+    -- is deterministic (order_id is unique) and correct even when a
+    -- customer has multiple orders on the same sale_date (confirmed: 382
+    -- such cases exist in production data).
+    customer_first_order AS (
+      SELECT DISTINCT ON ((${CUSTOMER_IDENTITY_KEY_SQL}))
+        (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
+        order_id AS first_order_id
+      FROM sales_fact_v
+      WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
+        AND ($1::date IS NULL OR sale_date <= $1::date)
+        AND ($2::text IS NULL OR billed_by = $2)
+        AND ($3::text[] IS NULL OR category <> ALL($3::text[]))
+        AND ($4::text IS NULL OR category = $4)
+        AND ($5::text IS NULL OR brand = $5)
+      ORDER BY (${CUSTOMER_IDENTITY_KEY_SQL}), sale_date ASC, order_id ASC
+    ),
     first_bill_amounts AS (
       SELECT
         fb.customer_key,
         fb.total_orders,
         SUM(sf.net_amount) AS first_bill_amount
       FROM customer_first_bill fb
-      JOIN sales_fact_v sf ON (${CUSTOMER_IDENTITY_KEY_SQL}) = fb.customer_key AND fb.first_bill_no = sf.bill_no
+      JOIN customer_first_order cfo ON cfo.customer_key = fb.customer_key
+      JOIN sales_fact_v sf ON (${CUSTOMER_IDENTITY_KEY_SQL}) = fb.customer_key AND sf.order_id = cfo.first_order_id
       WHERE ($4::text IS NULL OR sf.category = $4)
         AND ($5::text IS NULL OR sf.brand = $5)
       GROUP BY fb.customer_key, fb.total_orders
@@ -87,7 +108,7 @@ export async function getCohortMetrics(
         (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
         DATE_TRUNC('month', sf.sale_date)::date AS activity_month,
         SUM(sf.net_amount) AS revenue,
-        COUNT(DISTINCT sf.bill_no) AS bills,
+        COUNT(DISTINCT sf.order_id) AS bills,
         SUM(sf.quantity) AS units
       FROM sales_fact_v sf
       WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
@@ -240,8 +261,7 @@ export async function getBillCutCohorts(
       SELECT
         (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
         MIN(sale_date) AS first_date,
-        MIN(bill_no) AS first_bill_no,
-        COUNT(DISTINCT bill_no) AS total_orders
+        COUNT(DISTINCT order_id) AS total_orders
       FROM sales_fact_v
       WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
         AND ($1::date IS NULL OR sale_date <= $1::date)
@@ -251,13 +271,30 @@ export async function getBillCutCohorts(
         AND ($5::text IS NULL OR brand = $5)
       GROUP BY (${CUSTOMER_IDENTITY_KEY_SQL})
     ),
+    -- See getCohortMetrics() above for the full rationale — same
+    -- deterministic true-first-order fix (sale_date ASC, order_id ASC),
+    -- replacing the lexically-incorrect MIN(bill_no).
+    customer_first_order AS (
+      SELECT DISTINCT ON ((${CUSTOMER_IDENTITY_KEY_SQL}))
+        (${CUSTOMER_IDENTITY_KEY_SQL}) AS customer_key,
+        order_id AS first_order_id
+      FROM sales_fact_v
+      WHERE (${CUSTOMER_IDENTITY_KEY_SQL}) NOT LIKE 'ANON_%'
+        AND ($1::date IS NULL OR sale_date <= $1::date)
+        AND ($2::text IS NULL OR billed_by = $2)
+        AND ($3::text[] IS NULL OR category <> ALL($3::text[]))
+        AND ($4::text IS NULL OR category = $4)
+        AND ($5::text IS NULL OR brand = $5)
+      ORDER BY (${CUSTOMER_IDENTITY_KEY_SQL}), sale_date ASC, order_id ASC
+    ),
     first_bill_amounts AS (
       SELECT
         fb.customer_key,
         fb.total_orders,
         SUM(sf.net_amount) AS first_bill_amount
       FROM customer_first_bill fb
-      JOIN sales_fact_v sf ON (${CUSTOMER_IDENTITY_KEY_SQL}) = fb.customer_key AND fb.first_bill_no = sf.bill_no
+      JOIN customer_first_order cfo ON cfo.customer_key = fb.customer_key
+      JOIN sales_fact_v sf ON (${CUSTOMER_IDENTITY_KEY_SQL}) = fb.customer_key AND sf.order_id = cfo.first_order_id
       WHERE ($4::text IS NULL OR sf.category = $4)
         AND ($5::text IS NULL OR sf.brand = $5)
       GROUP BY fb.customer_key, fb.total_orders

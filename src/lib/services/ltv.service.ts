@@ -64,16 +64,16 @@ export async function getTopCustomers(
     SELECT
       customer_mobile AS "customerMobile",
       COALESCE(customer_name, 'Valued Customer') AS "customerName",
-      COUNT(DISTINCT bill_no)::integer AS orders,
+      COUNT(DISTINCT order_id)::integer AS orders,
       SUM(net_amount)::numeric AS revenue,
-      (SUM(net_amount) / NULLIF(COUNT(DISTINCT bill_no), 0))::numeric AS aov,
+      (SUM(net_amount) / NULLIF(COUNT(DISTINCT order_id), 0))::numeric AS aov,
       SUM(net_amount)::numeric AS ltv,
-      ROUND(LEAST(100, (COUNT(DISTINCT bill_no) * 10) + (100 / (1 + (CURRENT_DATE - MAX(sale_date))))))::integer AS "retentionScore",
+      ROUND(LEAST(100, (COUNT(DISTINCT order_id) * 10) + (100 / (1 + (CURRENT_DATE - MAX(sale_date))))))::integer AS "retentionScore",
       ($3::date - MAX(sale_date))::integer AS "lastPurchaseDays",
       MIN(sale_date)::text AS "firstPurchaseDate",
-      COALESCE(SUM(CASE WHEN sale_date >= $3::date - 30 THEN net_amount END) / NULLIF(COUNT(DISTINCT CASE WHEN sale_date >= $3::date - 30 THEN bill_no END), 0), 0)::numeric AS aov_m0,
-      COALESCE(SUM(CASE WHEN sale_date >= $3::date - 60 AND sale_date < $3::date - 30 THEN net_amount END) / NULLIF(COUNT(DISTINCT CASE WHEN sale_date >= $3::date - 60 AND sale_date < $3::date - 30 THEN bill_no END), 0), 0)::numeric AS aov_m1,
-      COALESCE(SUM(CASE WHEN sale_date >= $3::date - 90 AND sale_date < $3::date - 60 THEN net_amount END) / NULLIF(COUNT(DISTINCT CASE WHEN sale_date >= $3::date - 90 AND sale_date < $3::date - 60 THEN bill_no END), 0), 0)::numeric AS aov_m2
+      COALESCE(SUM(CASE WHEN sale_date >= $3::date - 30 THEN net_amount END) / NULLIF(COUNT(DISTINCT CASE WHEN sale_date >= $3::date - 30 THEN order_id END), 0), 0)::numeric AS aov_m0,
+      COALESCE(SUM(CASE WHEN sale_date >= $3::date - 60 AND sale_date < $3::date - 30 THEN net_amount END) / NULLIF(COUNT(DISTINCT CASE WHEN sale_date >= $3::date - 60 AND sale_date < $3::date - 30 THEN order_id END), 0), 0)::numeric AS aov_m1,
+      COALESCE(SUM(CASE WHEN sale_date >= $3::date - 90 AND sale_date < $3::date - 60 THEN net_amount END) / NULLIF(COUNT(DISTINCT CASE WHEN sale_date >= $3::date - 90 AND sale_date < $3::date - 60 THEN order_id END), 0), 0)::numeric AS aov_m2
     FROM sales_fact_v
     WHERE customer_mobile IS NOT NULL AND customer_mobile <> ''
       AND ($1::text IS NULL OR billed_by = $1)
@@ -148,7 +148,7 @@ export async function getLtvAovCacTrend(
       SELECT
         DATE_TRUNC('month', sale_date)::date AS m_date,
         SUM(net_amount) AS revenue,
-        COUNT(DISTINCT bill_no) AS orders,
+        COUNT(DISTINCT order_id) AS orders,
         COUNT(DISTINCT customer_mobile) AS active_customers
       FROM sales_fact_v
       WHERE customer_mobile IS NOT NULL AND customer_mobile <> ''

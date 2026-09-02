@@ -16,8 +16,8 @@ export async function getStoreScorecards(): Promise<StoreScorecard[]> {
 			SELECT 
 				billed_by AS store,
 				COALESCE(SUM(net_amount), 0)::FLOAT AS "grossRevenue",
-				COUNT(DISTINCT bill_no)::INT AS "orderCount",
-				COALESCE(SUM(net_amount) / NULLIF(COUNT(DISTINCT bill_no), 0), 0)::FLOAT AS aov
+				COUNT(DISTINCT order_id)::INT AS "orderCount",
+				COALESCE(SUM(net_amount) / NULLIF(COUNT(DISTINCT order_id), 0), 0)::FLOAT AS aov
 			FROM sales_fact_v
 			GROUP BY billed_by;
 		`;
@@ -56,7 +56,7 @@ export async function getCommercialBrandBreakdown(): Promise<
 			SELECT 
 				brand,
 				COALESCE(SUM(net_amount), 0)::FLOAT AS revenue,
-				COUNT(DISTINCT bill_no)::INT AS "orderCount"
+				COUNT(DISTINCT order_id)::INT AS "orderCount"
 			FROM sales_fact_v
 			GROUP BY brand
 			ORDER BY revenue DESC

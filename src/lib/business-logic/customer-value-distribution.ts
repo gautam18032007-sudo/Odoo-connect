@@ -72,7 +72,7 @@ export async function getValueDistribution(
     WITH base AS (
       SELECT
         (${CUSTOMER_IDENTITY_KEY_SQL}) AS ck,
-        bill_no,
+        order_id,
         net_amount
       FROM sales_fact_v
       WHERE sale_date <= $1::date
@@ -84,7 +84,7 @@ export async function getValueDistribution(
     per_customer AS (
       SELECT
         ck,
-        COUNT(DISTINCT bill_no) AS visits,
+        COUNT(DISTINCT order_id) AS visits,
         SUM(net_amount) AS revenue
       FROM base
       GROUP BY ck
@@ -102,7 +102,7 @@ export async function getValueDistribution(
 	// the bucketed sums so a bucketing bug can never silently drop revenue.
 	const totalsQueryString = `
     WITH base AS (
-      SELECT (${CUSTOMER_IDENTITY_KEY_SQL}) AS ck, bill_no, net_amount
+      SELECT (${CUSTOMER_IDENTITY_KEY_SQL}) AS ck, order_id, net_amount
       FROM sales_fact_v
       WHERE sale_date <= $1::date
         AND ($2::text IS NULL OR billed_by = $2)
@@ -112,7 +112,7 @@ export async function getValueDistribution(
     )
     SELECT
       COALESCE(SUM(net_amount), 0) AS revenue,
-      COUNT(DISTINCT bill_no)::integer AS bills,
+      COUNT(DISTINCT order_id)::integer AS bills,
       COUNT(DISTINCT ck)::integer AS customers
     FROM base`;
 

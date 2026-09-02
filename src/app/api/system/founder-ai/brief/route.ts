@@ -10,7 +10,7 @@ export async function GET() {
 		const [todaySales] = await sql`
 			SELECT 
 				COALESCE(SUM(net_amount), 0) AS revenue,
-				COUNT(DISTINCT bill_no) AS bills,
+				COUNT(DISTINCT order_id) AS bills,
 				COALESCE(SUM(quantity), 0) AS units
 			FROM sales_fact_v
 			WHERE sale_date = CURRENT_DATE
@@ -19,7 +19,7 @@ export async function GET() {
 		const [yesterdaySales] = await sql`
 			SELECT 
 				COALESCE(SUM(net_amount), 0) AS revenue,
-				COUNT(DISTINCT bill_no) AS bills
+				COUNT(DISTINCT order_id) AS bills
 			FROM sales_fact_v
 			WHERE sale_date = CURRENT_DATE - INTERVAL '1 day'
 		`;
@@ -27,7 +27,7 @@ export async function GET() {
 		const [mtdSales] = await sql`
 			SELECT 
 				COALESCE(SUM(net_amount), 0) AS revenue,
-				COUNT(DISTINCT bill_no) AS bills
+				COUNT(DISTINCT order_id) AS bills
 			FROM sales_fact_v
 			WHERE date_trunc('month', sale_date) = date_trunc('month', CURRENT_DATE)
 		`;

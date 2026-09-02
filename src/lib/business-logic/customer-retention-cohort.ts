@@ -58,7 +58,7 @@ export async function getRetentionCohort(
       SELECT
         (${CUSTOMER_IDENTITY_KEY_SQL}) AS ck,
         date_trunc('month', sale_date)::date AS m,
-        bill_no,
+        order_id,
         net_amount
       FROM sales_fact_v
       WHERE sale_date <= $1::date
@@ -79,7 +79,7 @@ export async function getRetentionCohort(
         b.m AS activity_month,
         COUNT(DISTINCT b.ck) AS active_customers,
         SUM(b.net_amount) AS revenue,
-        COUNT(DISTINCT b.bill_no) AS bills
+        COUNT(DISTINCT b.order_id) AS bills
       FROM base b
       JOIN cohort c ON c.ck = b.ck
       GROUP BY c.cohort_month, b.m

@@ -237,8 +237,33 @@ export async function upsertSalesLines(
 	return [...new Set(missingProductIds)];
 }
 
-export async function upsertInventory(records: OdooInventory[]): Promise<void> {
-	if (records.length === 0) return;
+export interface UpsertInventoryResult {
+	inserted: number;
+	skippedMissingProduct: number;
+	skippedDuplicateKey: number;
+	/** Odoo product IDs that caused a skip, deduplicated (capped for log size). */
+	missingProductIds: number[];
+}
+
+/**
+ * Previously silently dropped rows whose product_id wasn't yet in
+ * dim_products (a forensic audit found this explained a large share of a
+ * confirmed inventory completeness gap). Now returns categorized counts
+ * instead of swallowing them — callers are expected to log this, not treat
+ * a skip as equivalent to success. Does not fabricate products; a missing
+ * product must be synced through the normal product pipeline before its
+ * inventory can land here.
+ */
+export async function upsertInventory(
+	records: OdooInventory[],
+): Promise<UpsertInventoryResult> {
+	const empty: UpsertInventoryResult = {
+		inserted: 0,
+		skippedMissingProduct: 0,
+		skippedDuplicateKey: 0,
+		missingProductIds: [],
+	};
+	if (records.length === 0) return empty;
 
 	// Batched existence check
 	const productIds = [...new Set(records.map((r) => r.productId))];
@@ -249,14 +274,31 @@ export async function upsertInventory(records: OdooInventory[]): Promise<void> {
 
 	const seenInventoryKeys = new Set<string>();
 	const validRecords: OdooInventory[] = [];
+	const missingProductIdSet = new Set<number>();
+	let skippedMissingProduct = 0;
+	let skippedDuplicateKey = 0;
 	for (const r of records) {
-		if (!existingProductIds.has(r.productId)) continue;
+		if (!existingProductIds.has(r.productId)) {
+			skippedMissingProduct++;
+			if (missingProductIdSet.size < 200) missingProductIdSet.add(r.productId);
+			continue;
+		}
 		const key = `${r.productId}_${r.locationId}`;
-		if (seenInventoryKeys.has(key)) continue;
+		if (seenInventoryKeys.has(key)) {
+			skippedDuplicateKey++;
+			continue;
+		}
 		seenInventoryKeys.add(key);
 		validRecords.push(r);
 	}
-	if (validRecords.length === 0) return;
+	if (validRecords.length === 0) {
+		return {
+			inserted: 0,
+			skippedMissingProduct,
+			skippedDuplicateKey,
+			missingProductIds: [...missingProductIdSet],
+		};
+	}
 
 	const pIds = validRecords.map((r) => r.productId);
 	const lIds = validRecords.map((r) => r.locationId);
@@ -279,6 +321,13 @@ export async function upsertInventory(records: OdooInventory[]): Promise<void> {
 			reserved_quantity = EXCLUDED.reserved_quantity,
 			updated_at = NOW()
 	`;
+
+	return {
+		inserted: validRecords.length,
+		skippedMissingProduct,
+		skippedDuplicateKey,
+		missingProductIds: [...missingProductIdSet],
+	};
 }
 
 export async function getLastSyncTime(
@@ -465,16 +514,51 @@ export interface DeadLetterJobRow {
 	status: "dead_letter" | "retried" | "resolved";
 }
 
+/**
+ * Idempotent: an already-unresolved DLQ row for the same job_type is updated
+ * in place (attempts/error/last_sync_time refreshed) rather than duplicated.
+ * Without this, retrying the same permanently-failing job type would create
+ * a new row every retry, inflating the persisted count against reality.
+ */
 export async function insertDeadLetterJob(job: {
 	jobType: string;
 	attempts: number;
 	errorMessage: string;
 	lastSyncTime: string | null;
 }): Promise<void> {
+	const existing = await sql`
+		SELECT id FROM sync_dead_letter_queue
+		WHERE job_type = ${job.jobType} AND status = 'dead_letter'
+		LIMIT 1
+	`;
+	if (existing.length > 0) {
+		await sql`
+			UPDATE sync_dead_letter_queue
+			SET attempts = ${job.attempts}, error_message = ${job.errorMessage},
+				last_sync_time = ${job.lastSyncTime}, created_at = NOW()
+			WHERE id = ${existing[0].id}
+		`;
+		return;
+	}
 	await sql`
 		INSERT INTO sync_dead_letter_queue (job_type, attempts, error_message, last_sync_time)
 		VALUES (${job.jobType}, ${job.attempts}, ${job.errorMessage}, ${job.lastSyncTime})
 	`;
+}
+
+/**
+ * Authoritative, persisted DLQ count — used by the worker heartbeat instead
+ * of the in-memory SyncQueueManager counter, which is process-local and was
+ * confirmed (forensic audit) to diverge from this table whenever the DB
+ * insert in insertDeadLetterJob fails independently of the in-memory push.
+ */
+export async function getDeadLetterQueueCount(
+	status: "dead_letter" | "retried" | "resolved" = "dead_letter",
+): Promise<number> {
+	const result = await sql`
+		SELECT COUNT(*)::int AS count FROM sync_dead_letter_queue WHERE status = ${status}
+	`;
+	return Number(result[0]?.count || 0);
 }
 
 export async function getDeadLetterJobs(

@@ -13,7 +13,7 @@ export async function GET() {
 				COALESCE(SUM(gross_amount), 0) AS total_collection,
 				COALESCE(SUM(tax_amount), 0) AS total_gst,
 				COALESCE(SUM(net_amount), 0) AS total_revenue,
-				COUNT(DISTINCT bill_no) AS total_bills,
+				COUNT(DISTINCT order_id) AS total_bills,
 				COALESCE(SUM(quantity), 0) AS total_units
 			FROM sales_fact_v
 		`;
@@ -59,7 +59,7 @@ export async function GET() {
 				expectedValue: bills,
 				variance: 0,
 				status: "MATCH",
-				equation: "COUNT(DISTINCT bill_no)",
+				equation: "COUNT(DISTINCT order_id)",
 			},
 			{
 				metric: "Units Sold",

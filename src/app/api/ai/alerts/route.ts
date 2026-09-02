@@ -84,22 +84,31 @@ export async function GET() {
 			});
 		}
 
-		// 4. WhatsApp Automation Alerts
-		const whatsapp = await sql`
-			SELECT COUNT(*)::int AS pending_messages
-			FROM whatsapp_message
-			WHERE state = 'outgoing'
-		`;
-		const pendingCount = Number(whatsapp[0]?.pending_messages || 0);
-		if (pendingCount > 0) {
-			alerts.push({
-				id: "wa_pending",
-				type: "WHATSAPP",
-				severity: "INFO",
-				title: "WhatsApp Queue Active",
-				message: `${pendingCount} automated WhatsApp notifications queued for delivery to customers.`,
-				timestamp: new Date().toISOString(),
-			});
+		// 4. WhatsApp Automation Alerts — optional: whatsapp_message doesn't exist
+		// on every environment (no active WhatsApp integration on this DB), so a
+		// missing table here must not take down the other 3, working alert types.
+		try {
+			const whatsapp = await sql`
+				SELECT COUNT(*)::int AS pending_messages
+				FROM whatsapp_message
+				WHERE state = 'outgoing'
+			`;
+			const pendingCount = Number(whatsapp[0]?.pending_messages || 0);
+			if (pendingCount > 0) {
+				alerts.push({
+					id: "wa_pending",
+					type: "WHATSAPP",
+					severity: "INFO",
+					title: "WhatsApp Queue Active",
+					message: `${pendingCount} automated WhatsApp notifications queued for delivery to customers.`,
+					timestamp: new Date().toISOString(),
+				});
+			}
+		} catch (whatsappError: any) {
+			console.error(
+				"[Founder AI Alerts] WhatsApp check skipped:",
+				whatsappError.message,
+			);
 		}
 
 		return NextResponse.json({

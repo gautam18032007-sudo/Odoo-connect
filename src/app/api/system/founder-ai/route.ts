@@ -12,7 +12,7 @@ export async function GET() {
 		const [todaySales] = await sql`
 			SELECT 
 				COALESCE(SUM(net_amount), 0) AS revenue,
-				COUNT(DISTINCT bill_no) AS bills,
+				COUNT(DISTINCT order_id) AS bills,
 				COALESCE(SUM(quantity), 0) AS units
 			FROM sales_fact_v
 			WHERE sale_date = CURRENT_DATE
@@ -22,7 +22,7 @@ export async function GET() {
 			SELECT 
 				billed_by,
 				COALESCE(SUM(net_amount), 0) AS revenue,
-				COUNT(DISTINCT bill_no) AS bills
+				COUNT(DISTINCT order_id) AS bills
 			FROM sales_fact_v
 			GROUP BY billed_by
 			ORDER BY revenue DESC

@@ -1,6 +1,7 @@
 import * as os from "node:os";
 import {
 	getAllLastSyncTimes,
+	getDeadLetterQueueCount,
 	upsertWorkerHeartbeat,
 } from "../../repositories/odoo.repository";
 import { OdooClient } from "../client";
@@ -53,6 +54,32 @@ export class AlwaysOnSyncWorker {
 			activeJobCount: this.queueManager.getPendingCount(),
 			deadLetterCount: this.queueManager.getDeadLetterCount(),
 		};
+	}
+
+	/**
+	 * Same as getState(), but with deadLetterCount sourced from the
+	 * persisted sync_dead_letter_queue table instead of the in-memory
+	 * SyncQueueManager counter. Used only for the heartbeat write below —
+	 * that's the value external consumers (/api/health, /api/sync/status
+	 * reading a remote heartbeat) actually see, and it must reflect durable
+	 * state, not this process's in-memory count, which a forensic audit
+	 * confirmed can silently diverge from the table (insertDeadLetterJob's
+	 * own DB write can fail independently of the in-memory push).
+	 * Falls back to the in-memory count if the DB read itself fails, so a
+	 * transient DB error can't block the heartbeat write entirely.
+	 */
+	private async getPersistedState(): Promise<SyncWorkerState> {
+		const inMemoryState = this.getState();
+		try {
+			const persistedDeadLetterCount = await getDeadLetterQueueCount();
+			return { ...inMemoryState, deadLetterCount: persistedDeadLetterCount };
+		} catch (err: any) {
+			console.warn(
+				"[AlwaysOnSyncWorker] Failed to read persisted DLQ count for heartbeat (using in-memory count):",
+				err.message,
+			);
+			return inMemoryState;
+		}
 	}
 
 	public stop(): void {
@@ -179,14 +206,14 @@ export class AlwaysOnSyncWorker {
 			// Persist heartbeat so /api/sync/status and /api/health can report
 			// this worker's real state even when it runs on a separate host.
 			// Fire-and-forget — a heartbeat write failure must never stall sync.
-			upsertWorkerHeartbeat(WORKER_ID, os.hostname(), this.getState()).catch(
-				(err) => {
+			this.getPersistedState()
+				.then((state) => upsertWorkerHeartbeat(WORKER_ID, os.hostname(), state))
+				.catch((err) => {
 					console.warn(
 						"[AlwaysOnSyncWorker] Failed to persist heartbeat:",
 						err.message,
 					);
-				},
-			);
+				});
 
 			// Calculate remaining sleep time for consistent loop pacing
 			const elapsed = Date.now() - cycleStart;

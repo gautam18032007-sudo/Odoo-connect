@@ -58,7 +58,7 @@ export async function getIdentityConfidence(
           WHEN ${NAME_PRESENT_SQL} THEN 'name'
           ELSE 'anonymous'
         END AS source,
-        bill_no,
+        order_id,
         net_amount
       FROM sales_fact_v
       WHERE sale_date BETWEEN $1::date AND $2::date
@@ -71,7 +71,7 @@ export async function getIdentityConfidence(
       source,
       COUNT(DISTINCT ck)::integer AS customers,
       COALESCE(SUM(net_amount), 0) AS revenue,
-      COUNT(DISTINCT bill_no)::integer AS bills
+      COUNT(DISTINCT order_id)::integer AS bills
     FROM scoped
     GROUP BY source`;
 

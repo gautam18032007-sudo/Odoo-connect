@@ -17,7 +17,7 @@ export async function GET() {
 			`,
 				sql`
 				SELECT COUNT(*)::int AS total_rows,
-					COUNT(DISTINCT bill_no)::int AS total_bills,
+					COUNT(DISTINCT order_id)::int AS total_bills,
 					COALESCE(SUM(net_amount), 0) AS total_revenue
 				FROM sales_fact_v
 			`,

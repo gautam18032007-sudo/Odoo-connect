@@ -102,6 +102,32 @@ async function fetchAndUpsertMissingProducts(
 }
 
 /**
+ * Odoo's price_subtotal/price_subtotal_incl are NOT reliably signed for
+ * refund lines — a forensic audit found 58 refund orders where
+ * price_subtotal came back positive despite the parent order's
+ * amount_total being correctly negative. qty IS reliably signed (negative
+ * for a return line), so it drives the sign here instead of trusting the
+ * raw amount fields — matches the previously-proven-exact formula from
+ * this engagement's earlier audit work. See
+ * docs/ODOO_SOURCE_OF_TRUTH_AUDIT.md §P.
+ *
+ * Pure function — no DB/Odoo access, safe to unit test directly.
+ */
+export function deriveSignedLineAmounts(
+	rawSubtotal: number,
+	rawSubtotalIncl: number,
+	qty: number,
+): { priceSubtotal: number; taxAmount: number } {
+	const sign = qty < 0 ? -1 : 1;
+	const priceSubtotal = sign * Math.abs(rawSubtotal);
+	// price_subtotal_incl is tax-inclusive; price_subtotal is not — the
+	// difference is the tax, sign-corrected the same way so a refund's tax
+	// moves in the same direction as its subtotal.
+	const taxAmount = sign * Math.abs(rawSubtotalIncl - rawSubtotal);
+	return { priceSubtotal, taxAmount };
+}
+
+/**
  * Synchronizes Odoo stores (pos.config), Sales Orders (sale.order),
  * and Point of Sale orders (pos.order) incrementally.
  */
@@ -583,9 +609,12 @@ async function syncPosSales(
 				const productId = Array.isArray(line.product_id)
 					? Number(line.product_id[0])
 					: 0;
-				const priceSubtotal = Number(line.price_subtotal || 0); // Negative if return line
-				// price_subtotal_incl is tax-inclusive; price_subtotal is not — the difference is the tax.
-				const taxAmount = Number(line.price_subtotal_incl || 0) - priceSubtotal;
+				const qty = Number(line.qty || 0);
+				const { priceSubtotal, taxAmount } = deriveSignedLineAmounts(
+					Number(line.price_subtotal || 0),
+					Number(line.price_subtotal_incl || 0),
+					qty,
+				);
 
 				return {
 					id: `pos_line_${line.id}`,
@@ -593,7 +622,7 @@ async function syncPosSales(
 					productId,
 					priceUnit: Number(line.price_unit || 0),
 					discount: Number(line.discount || 0),
-					qty: Number(line.qty || 0), // Negative if return line
+					qty, // Negative if return line
 					priceSubtotal,
 					taxAmount,
 				};

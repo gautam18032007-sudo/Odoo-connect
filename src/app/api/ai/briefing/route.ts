@@ -21,8 +21,8 @@ export async function GET() {
 		const [revenueStats] = await sql`
 			SELECT 
 				COALESCE(SUM(net_amount), 0)::numeric AS total_revenue,
-				COUNT(DISTINCT bill_no)::int AS total_orders,
-				ROUND(COALESCE(SUM(net_amount) / NULLIF(COUNT(DISTINCT bill_no), 0), 0)::numeric, 2) AS aov,
+				COUNT(DISTINCT order_id)::int AS total_orders,
+				ROUND(COALESCE(SUM(net_amount) / NULLIF(COUNT(DISTINCT order_id), 0), 0)::numeric, 2) AS aov,
 				COALESCE(SUM(tax_amount), 0)::numeric AS total_gst
 			FROM sales_fact_v
 			WHERE sale_date >= CURRENT_DATE - INTERVAL '1 day'
@@ -33,8 +33,8 @@ export async function GET() {
 			SELECT 
 				billed_by AS store_name,
 				COALESCE(SUM(net_amount), 0)::numeric AS revenue,
-				COUNT(DISTINCT bill_no)::int AS orders,
-				ROUND(COALESCE(SUM(net_amount) / NULLIF(COUNT(DISTINCT bill_no), 0), 0)::numeric, 2) AS aov
+				COUNT(DISTINCT order_id)::int AS orders,
+				ROUND(COALESCE(SUM(net_amount) / NULLIF(COUNT(DISTINCT order_id), 0), 0)::numeric, 2) AS aov
 			FROM sales_fact_v
 			WHERE sale_date >= CURRENT_DATE - INTERVAL '30 days'
 			GROUP BY billed_by
@@ -54,14 +54,24 @@ export async function GET() {
 			LIMIT 10
 		`;
 
-		// 4. Customer Activity (VIP Detection)
-		const [vipStats] = await sql`
-			SELECT 
-				COUNT(DISTINCT customer_id)::int AS total_vip_customers,
-				COALESCE(SUM(lifetime_value), 0)::numeric AS total_vip_spend
-			FROM dim_customers
-			WHERE lifetime_value >= 5000 AND active = true
+		// 4. Customer Activity (VIP Detection) — computed from sales_fact_v since
+		// dim_customers has no stored customer_id/lifetime_value columns; lifetime
+		// spend is derived directly from actual sales, mirroring the identity/
+		// aggregation pattern used elsewhere in this app.
+		const [vipRow] = await sql`
+			WITH lifetime_spend AS (
+				SELECT customer_mobile, SUM(net_amount) AS spend
+				FROM sales_fact_v
+				WHERE customer_mobile IS NOT NULL AND customer_mobile <> ''
+				GROUP BY customer_mobile
+				HAVING SUM(net_amount) >= 5000
+			)
+			SELECT
+				COUNT(*)::int AS total_vip_customers,
+				COALESCE(SUM(spend), 0)::numeric AS total_vip_spend
+			FROM lifetime_spend
 		`;
+		const vipStats = vipRow;
 
 		const briefing = {
 			generatedAt: new Date().toISOString(),

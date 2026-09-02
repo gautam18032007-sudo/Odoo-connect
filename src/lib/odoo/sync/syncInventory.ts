@@ -26,6 +26,9 @@ export async function syncInventory(client: OdooClient): Promise<number> {
 	const limit = 100;
 	let totalUpserted = 0;
 	let totalSkippedUnresolved = 0;
+	let totalSkippedMissingProduct = 0;
+	let totalSkippedDuplicateKey = 0;
+	const missingProductIdsSeen = new Set<number>();
 	let hasMore = true;
 
 	// fact_inventory.location_id now has a FK to dim_locations (Phase 3) — an
@@ -131,8 +134,17 @@ export async function syncInventory(client: OdooClient): Promise<number> {
 			);
 		}
 
-		await upsertInventory(inventoryToUpsert);
-		totalUpserted += inventoryToUpsert.length;
+		const upsertResult = await upsertInventory(inventoryToUpsert);
+		totalUpserted += upsertResult.inserted;
+		totalSkippedMissingProduct += upsertResult.skippedMissingProduct;
+		totalSkippedDuplicateKey += upsertResult.skippedDuplicateKey;
+		for (const id of upsertResult.missingProductIds)
+			missingProductIdsSeen.add(id);
+		if (upsertResult.skippedMissingProduct > 0) {
+			console.warn(
+				`[syncInventory] Skipped ${upsertResult.skippedMissingProduct} record(s) — product not yet in dim_products (fail-safe, not fabricated). Sample product IDs: ${upsertResult.missingProductIds.slice(0, 20).join(", ")}`,
+			);
+		}
 
 		if (records.length < limit) {
 			hasMore = false;
@@ -142,7 +154,7 @@ export async function syncInventory(client: OdooClient): Promise<number> {
 	}
 
 	console.log(
-		`[syncInventory] Completed. Total stock.quant levels upserted: ${totalUpserted}. Skipped (unresolved location): ${totalSkippedUnresolved}.`,
+		`[syncInventory] Completed. Upserted: ${totalUpserted}. Skipped (unresolved location): ${totalSkippedUnresolved}. Skipped (product not yet synced): ${totalSkippedMissingProduct} (${missingProductIdsSeen.size} distinct products). Skipped (duplicate key in batch): ${totalSkippedDuplicateKey}.`,
 	);
 	return totalUpserted;
 }

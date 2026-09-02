@@ -61,7 +61,7 @@ export async function getProfitability(
 	const [salesRow] = await (db as any).query(
 		`SELECT
       COALESCE(SUM(s.net_amount), 0) AS net_sales,
-      COUNT(DISTINCT s.bill_no) AS bill_cuts,
+      COUNT(DISTINCT s.order_id) AS bill_cuts,
       ${COST_MASTER_AGG_SQL}
     FROM sales_fact_v s
     LEFT JOIN product_master pm ON s.sku_code = pm.sku_code
@@ -130,7 +130,7 @@ export async function getStoreProfitability(
 
 	const salesRows = await (db as any).query(
 		`SELECT s.billed_by, MAX(s.store_display_name) AS store_display_name,
-      SUM(s.net_amount) AS net_sales, SUM(s.quantity) AS units, COUNT(DISTINCT s.bill_no) AS bill_cuts,
+      SUM(s.net_amount) AS net_sales, SUM(s.quantity) AS units, COUNT(DISTINCT s.order_id) AS bill_cuts,
       ${COST_MASTER_AGG_SQL}
     FROM sales_fact_v s
     LEFT JOIN product_master pm ON s.sku_code = pm.sku_code
@@ -398,7 +398,7 @@ export async function getCategoryProfitability(
 	const hasPurchase = await hasPurchaseData(db);
 
 	const salesRows = await (db as any).query(
-		`SELECT s.category, SUM(s.net_amount) AS net_sales, COUNT(DISTINCT s.bill_no) AS bill_cuts,
+		`SELECT s.category, SUM(s.net_amount) AS net_sales, COUNT(DISTINCT s.order_id) AS bill_cuts,
       ${COST_MASTER_AGG_SQL}
     FROM sales_fact_v s
     LEFT JOIN product_master pm ON s.sku_code = pm.sku_code
