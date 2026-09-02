@@ -275,13 +275,31 @@ export async function syncSales(
 					},
 				);
 				await upsertPosConfigs(posConfigDimensions);
-				await backfillStoreSourceFields();
 			} catch (dimErr: any) {
 				// Canonical dimension refresh failing must never break the store/
 				// order sync that already succeeded above — log and move on.
 				console.warn(
-					"[syncSales] dim_pos_configs / dim_stores canonical backfill failed (non-fatal):",
+					"[syncSales] dim_pos_configs canonical refresh failed (non-fatal):",
 					dimErr.message,
+				);
+			}
+
+			// Store-identity reliability fix (multi-store scalability audit): this
+			// backfill only reads whatever dim_pos_configs already has — it does
+			// NOT depend on the warehouse-code lookup or upsertPosConfigs() above
+			// succeeding this cycle, so it gets its own try/catch. Previously this
+			// was chained after upsertPosConfigs() inside one try block, so a
+			// transient failure in the extra stock.warehouse Odoo API call (or
+			// anything else in that block) silently skipped this backfill too —
+			// observed in production as dim_pos_configs staying stale for 33+
+			// hours while a real store (HQ27GGN) stayed stuck on the generic
+			// "STORE" placeholder code the whole time.
+			try {
+				await backfillStoreSourceFields();
+			} catch (backfillErr: any) {
+				console.warn(
+					"[syncSales] dim_stores source-field backfill failed (non-fatal):",
+					backfillErr.message,
 				);
 			}
 		} else {

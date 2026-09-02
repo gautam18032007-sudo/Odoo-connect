@@ -382,11 +382,25 @@ export async function runWindowedReconciliation(
 					},
 				);
 				await upsertPosConfigs(posConfigDimensions);
-				await backfillStoreSourceFields();
 			} catch (dimErr: any) {
 				console.warn(
-					"[runWindowedReconciliation] dim_pos_configs / dim_stores canonical backfill failed (non-fatal):",
+					"[runWindowedReconciliation] dim_pos_configs canonical refresh failed (non-fatal):",
 					dimErr.message,
+				);
+			}
+
+			// Store-identity reliability fix (multi-store scalability audit): own
+			// try/catch, decoupled from upsertPosConfigs()/the warehouse lookup
+			// above — see syncSales.ts for the full rationale (a transient failure
+			// there was observed to silently skip this backfill too, leaving a
+			// real store, HQ27GGN, stuck on the generic "STORE" code for 33+
+			// hours in production).
+			try {
+				await backfillStoreSourceFields();
+			} catch (backfillErr: any) {
+				console.warn(
+					"[runWindowedReconciliation] dim_stores source-field backfill failed (non-fatal):",
+					backfillErr.message,
 				);
 			}
 		} else {

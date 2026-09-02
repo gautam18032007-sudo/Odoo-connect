@@ -75,7 +75,26 @@ export async function upsertStores(stores: OdooStore[]): Promise<void> {
 			VALUES (${store.id}, ${store.name}, ${store.code || null}, ${store.locationId ?? null})
 			ON CONFLICT (id) DO UPDATE SET
 				name = EXCLUDED.name,
-				code = EXCLUDED.code,
+				-- Store-identity reliability fix (multi-store scalability audit):
+				-- 'code' here is only ever a name-substring guess ("klj"/"swn"/
+				-- "smartworks"/"zenzebra" -> known code, else the generic "STORE"
+				-- placeholder — see syncSales.ts/reconciliation.ts). The real code
+				-- comes from backfillStoreSourceFields() joining Odoo's own
+				-- dim_pos_configs.warehouse_code. That backfill call has been
+				-- observed to silently stop running in production (dim_pos_configs
+				-- staying stale for 33+ hours while dim_stores kept updating), which
+				-- meant this UPDATE was unconditionally re-clobbering an already
+				-- backfilled/correct code with the stale guess on every single sync
+				-- cycle. Once a real code is present (anything other than NULL or
+				-- the generic "STORE" placeholder), preserve it here — the guess
+				-- only applies to a store that has never been correctly identified
+				-- yet, so a fragile backfill step is no longer load-bearing for
+				-- keeping an already-correct code alive.
+				code = CASE
+					WHEN dim_stores.code IS NULL OR dim_stores.code = 'STORE'
+						THEN EXCLUDED.code
+					ELSE dim_stores.code
+				END,
 				location_id = COALESCE(EXCLUDED.location_id, dim_stores.location_id),
 				updated_at = NOW()
 		`;
