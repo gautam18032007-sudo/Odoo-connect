@@ -1,3 +1,4 @@
+import { sql } from "../../db";
 import {
 	type OdooProduct,
 	type OdooSalesLine,
@@ -501,6 +502,123 @@ async function syncStandardSales(
 	return orderCount;
 }
 
+const POS_ORDER_FIELDS = [
+	"id",
+	"name",
+	"date_order",
+	"partner_id",
+	"amount_total",
+	"amount_tax",
+	"state",
+	"config_id",
+	"lines",
+	"write_date",
+];
+
+/**
+ * Maps a batch of raw pos.order records (with their `lines` id array) and
+ * upserts both the orders and their line items via the existing idempotent
+ * repository functions. Shared by the normal incremental sync and the
+ * bounded historical reconciliation pass below — a single insertion path,
+ * not two parallel ones.
+ */
+async function upsertPosOrderBatch(
+	client: OdooClient,
+	records: any[],
+): Promise<void> {
+	// Map POS Orders (handles returns where amount_total < 0)
+	const posOrders: OdooSalesOrder[] = records.map((rec: any) => {
+		const partnerId = Array.isArray(rec.partner_id)
+			? Number(rec.partner_id[0])
+			: null;
+		const storeId = Array.isArray(rec.config_id)
+			? Number(rec.config_id[0])
+			: null;
+
+		const totalAmount = Number(rec.amount_total || 0);
+		const taxAmount = Number(rec.amount_tax || 0);
+		const untaxedAmount = totalAmount - taxAmount;
+
+		const rawDate = String(rec.date_order || "");
+		const utcDateStr = rawDate
+			? rawDate.includes("T")
+				? rawDate
+				: `${rawDate.replace(" ", "T")}Z`
+			: new Date().toISOString();
+
+		return {
+			id: `pos_${rec.id}`,
+			name: String(rec.name),
+			dateOrder: new Date(utcDateStr).toISOString(),
+			partnerId,
+			storeId,
+			amountTotal: totalAmount,
+			amountUntaxed: untaxedAmount,
+			state: String(rec.state),
+			orderType: "pos",
+		};
+	});
+
+	await upsertSalesOrders(posOrders);
+
+	const posLineIds = records
+		.flatMap((rec: any) => rec.lines || [])
+		.map((id: any) => Number(id));
+
+	if (posLineIds.length === 0) return;
+
+	const lines = await client.callKw<any[]>(
+		"pos.order.line",
+		"search_read",
+		[],
+		{
+			domain: [["id", "in", posLineIds]],
+			fields: [
+				"id",
+				"order_id",
+				"product_id",
+				"price_unit",
+				"discount",
+				"qty",
+				"price_subtotal",
+				"price_subtotal_incl",
+			],
+		},
+	);
+
+	const salesLines: OdooSalesLine[] = lines.map((line: any) => {
+		const orderId = Array.isArray(line.order_id)
+			? `pos_${line.order_id[0]}`
+			: "";
+		const productId = Array.isArray(line.product_id)
+			? Number(line.product_id[0])
+			: 0;
+		const qty = Number(line.qty || 0);
+		const { priceSubtotal, taxAmount } = deriveSignedLineAmounts(
+			Number(line.price_subtotal || 0),
+			Number(line.price_subtotal_incl || 0),
+			qty,
+		);
+
+		return {
+			id: `pos_line_${line.id}`,
+			orderId,
+			productId,
+			priceUnit: Number(line.price_unit || 0),
+			discount: Number(line.discount || 0),
+			qty, // Negative if return line
+			priceSubtotal,
+			taxAmount,
+		};
+	});
+
+	const missingProductIds = await upsertSalesLines(salesLines);
+	if (missingProductIds.length > 0) {
+		await fetchAndUpsertMissingProducts(client, missingProductIds);
+		await upsertSalesLines(salesLines);
+	}
+}
+
 /**
  * Syncs POS pos.order records.
  */
@@ -508,18 +626,7 @@ async function syncPosSales(
 	client: OdooClient,
 	lastSync: string | null,
 ): Promise<number> {
-	const fields = [
-		"id",
-		"name",
-		"date_order",
-		"partner_id",
-		"amount_total",
-		"amount_tax",
-		"state",
-		"config_id",
-		"lines",
-		"write_date",
-	];
+	const fields = POS_ORDER_FIELDS;
 
 	const LOOKBACK_MS = 10 * 60 * 1000; // 10-minute safety lookback window
 	const effectiveLastSync = lastSync
@@ -559,101 +666,8 @@ async function syncPosSales(
 			`[syncSales] POS Order batch fetched: ${records.length} records.`,
 		);
 
-		// Map POS Orders (handles returns where amount_total < 0)
-		const posOrders: OdooSalesOrder[] = records.map((rec: any) => {
-			const partnerId = Array.isArray(rec.partner_id)
-				? Number(rec.partner_id[0])
-				: null;
-			const storeId = Array.isArray(rec.config_id)
-				? Number(rec.config_id[0])
-				: null;
-
-			const totalAmount = Number(rec.amount_total || 0);
-			const taxAmount = Number(rec.amount_tax || 0);
-			const untaxedAmount = totalAmount - taxAmount;
-
-			const rawDate = String(rec.date_order || "");
-			const utcDateStr = rawDate
-				? rawDate.includes("T")
-					? rawDate
-					: `${rawDate.replace(" ", "T")}Z`
-				: new Date().toISOString();
-
-			return {
-				id: `pos_${rec.id}`,
-				name: String(rec.name),
-				dateOrder: new Date(utcDateStr).toISOString(),
-				partnerId,
-				storeId,
-				amountTotal: totalAmount,
-				amountUntaxed: untaxedAmount,
-				state: String(rec.state),
-				orderType: "pos",
-			};
-		});
-
-		// Upsert Orders
-		await upsertSalesOrders(posOrders);
-
-		// Extract all POS line IDs
-		const posLineIds = records
-			.flatMap((rec: any) => rec.lines || [])
-			.map((id: any) => Number(id));
-
-		if (posLineIds.length > 0) {
-			const lines = await client.callKw<any[]>(
-				"pos.order.line",
-				"search_read",
-				[],
-				{
-					domain: [["id", "in", posLineIds]],
-					fields: [
-						"id",
-						"order_id",
-						"product_id",
-						"price_unit",
-						"discount",
-						"qty",
-						"price_subtotal",
-						"price_subtotal_incl",
-					],
-				},
-			);
-
-			const salesLines: OdooSalesLine[] = lines.map((line: any) => {
-				const orderId = Array.isArray(line.order_id)
-					? `pos_${line.order_id[0]}`
-					: "";
-				const productId = Array.isArray(line.product_id)
-					? Number(line.product_id[0])
-					: 0;
-				const qty = Number(line.qty || 0);
-				const { priceSubtotal, taxAmount } = deriveSignedLineAmounts(
-					Number(line.price_subtotal || 0),
-					Number(line.price_subtotal_incl || 0),
-					qty,
-				);
-
-				return {
-					id: `pos_line_${line.id}`,
-					orderId,
-					productId,
-					priceUnit: Number(line.price_unit || 0),
-					discount: Number(line.discount || 0),
-					qty, // Negative if return line
-					priceSubtotal,
-					taxAmount,
-				};
-			});
-
-			const missingProductIds = await upsertSalesLines(salesLines);
-			if (missingProductIds.length > 0) {
-				await fetchAndUpsertMissingProducts(client, missingProductIds);
-				await upsertSalesLines(salesLines);
-			}
-		}
-
-		orderCount += posOrders.length;
+		await upsertPosOrderBatch(client, records);
+		orderCount += records.length;
 
 		if (records.length < limit) {
 			hasMore = false;
@@ -663,4 +677,132 @@ async function syncPosSales(
 	}
 
 	return orderCount;
+}
+
+/**
+ * Bounded historical reconciliation for pos.order records (F-2 fix).
+ *
+ * syncPosSales() above filters by `write_date >= lastSync`, which can
+ * permanently miss an order whose `date_order` falls inside the required
+ * business period but whose `write_date` fell behind the incremental
+ * cursor (e.g. from how an earlier backfill assigned timestamps) — proven
+ * in production: 339 July orders and a further 193 August orders were
+ * silently and permanently skipped this way, invisible to the incremental
+ * sync's forward-only cursor.
+ *
+ * This function does NOT replace the incremental sync — it is a separate,
+ * bounded (trailing `windowDays`, default 45) safety net keyed on
+ * `date_order` instead of `write_date`. It diffs the fetched Odoo IDs
+ * against Neon and only upserts genuinely missing ones (via the same
+ * `upsertPosOrderBatch` path used above — one insertion system, not two),
+ * so a normal run where nothing is missing costs one Odoo fetch plus one
+ * Neon existence check, not a rewrite of already-correct rows.
+ *
+ * Callers are expected to throttle invocation (see
+ * shouldRunHistoricalReconciliation()) — this function itself does not
+ * rate-limit, so calling it directly bypasses that safety.
+ */
+export async function reconcileHistoricalPosSales(
+	client: OdooClient,
+	windowDays = 45,
+): Promise<{ ordersRepaired: number; skippedLines: number }> {
+	const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+	const domain: any[] = [
+		["date_order", ">=", formatDateTimeForOdoo(since)],
+		["state", "in", ["paid", "done", "invoiced"]],
+	];
+
+	let offset = 0;
+	const limit = 200;
+	let totalRepaired = 0;
+	let hasMore = true;
+
+	while (hasMore) {
+		const records = await client.fetchBatch(
+			"pos.order",
+			POS_ORDER_FIELDS,
+			domain,
+			"date_order asc",
+			limit,
+			offset,
+		);
+
+		if (records.length === 0) {
+			hasMore = false;
+			break;
+		}
+
+		const posIds = records.map((rec: any) => `pos_${rec.id}`);
+		const existing = await sql`
+			SELECT id FROM fact_sales_orders WHERE id = ANY(${posIds})
+		`;
+		const existingSet = new Set(existing.map((r: any) => r.id as string));
+		const missingRecords = records.filter(
+			(rec: any) => !existingSet.has(`pos_${rec.id}`),
+		);
+
+		if (missingRecords.length > 0) {
+			console.log(
+				`[reconcileHistoricalPosSales] Found ${missingRecords.length} orders missed by incremental sync in this batch — repairing.`,
+			);
+			await upsertPosOrderBatch(client, missingRecords);
+			totalRepaired += missingRecords.length;
+		}
+
+		if (records.length < limit) {
+			hasMore = false;
+		} else {
+			offset += limit;
+		}
+	}
+
+	if (totalRepaired > 0) {
+		console.log(
+			`[reconcileHistoricalPosSales] Repaired ${totalRepaired} historically-missed order(s) within the trailing ${windowDays}-day window.`,
+		);
+	}
+
+	return { ordersRepaired: totalRepaired, skippedLines: 0 };
+}
+
+/**
+ * Throttle for reconcileHistoricalPosSales(): the trailing-window scan
+ * touches every order in the window (thousands at current volume), so it
+ * must not run on every 5-minute cron/worker tick. Runs at most once per
+ * `minIntervalHours` (default 24h) after a *successful* run, tracked via
+ * sync_telemetry the same way every other sync type already is — no new
+ * table. Distinguishes outcome, not just recency (F-2-1 fix — a prior
+ * version blocked retries for the full window even after a failed attempt):
+ *
+ *   no prior row       -> run
+ *   status = 'syncing' -> block, UNLESS stuck longer than STUCK_THRESHOLD_MS
+ *                         (a crashed run must not permanently wedge this)
+ *   status = 'failed'  -> always allow an immediate retry
+ *   status = 'success' -> normal `minIntervalHours` throttle applies
+ */
+const RECONCILIATION_STUCK_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+
+export async function shouldRunHistoricalReconciliation(
+	minIntervalHours = 24,
+): Promise<boolean> {
+	const rows = await sql`
+		SELECT status, started_at FROM sync_telemetry
+		WHERE entity = 'sales_reconciliation'
+		ORDER BY started_at DESC LIMIT 1
+	`;
+	if (rows.length === 0) return true;
+
+	const { status, started_at } = rows[0] as {
+		status: string;
+		started_at: string;
+	};
+	const ageMs = Date.now() - new Date(started_at).getTime();
+
+	if (status === "syncing") {
+		return ageMs > RECONCILIATION_STUCK_THRESHOLD_MS;
+	}
+	if (status === "failed") {
+		return true;
+	}
+	return ageMs >= minIntervalHours * 60 * 60 * 1000;
 }

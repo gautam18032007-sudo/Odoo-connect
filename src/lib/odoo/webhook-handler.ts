@@ -18,10 +18,10 @@ export function verifyWebhookSecret(
 ): boolean {
 	const expectedSecret = process.env.ODOO_WEBHOOK_SECRET;
 	if (!expectedSecret) {
-		console.warn(
-			"[webhookSecret] ODOO_WEBHOOK_SECRET is not configured on server.",
+		console.error(
+			"[webhookSecret] ODOO_WEBHOOK_SECRET is not configured — rejecting all webhook requests (fail closed).",
 		);
-		return true; // allow if secret is not configured for local dev
+		return false;
 	}
 
 	const headerSecret = headers.get("x-webhook-secret");

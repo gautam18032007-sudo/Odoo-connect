@@ -5,7 +5,11 @@ import { releaseCronLock, tryAcquireCronLock } from "@/lib/odoo/sync/cron-lock";
 import { syncCustomers } from "@/lib/odoo/sync/syncCustomers";
 import { syncInventory } from "@/lib/odoo/sync/syncInventory";
 import { syncProducts } from "@/lib/odoo/sync/syncProducts";
-import { syncSales } from "@/lib/odoo/sync/syncSales";
+import {
+	reconcileHistoricalPosSales,
+	shouldRunHistoricalReconciliation,
+	syncSales,
+} from "@/lib/odoo/sync/syncSales";
 import {
 	getLastSyncTime,
 	getWorkerHeartbeat,
@@ -242,6 +246,50 @@ export async function GET(req: NextRequest) {
 			await logSyncTelemetry(
 				"sales",
 				salesStart,
+				new Date().toISOString(),
+				"failed",
+				0,
+				err?.message ?? null,
+				0,
+				0,
+				"active",
+				{ traceId, workerId: "vercel_cron" },
+			);
+		}
+
+		// Bounded historical reconciliation (F-2 fix): syncSales() above only
+		// catches up records via write_date, which can permanently miss orders
+		// whose write_date fell behind the cursor while their date_order still
+		// belongs to the synced period (proven in production — see
+		// reconcileHistoricalPosSales()'s own doc comment). This is a separate,
+		// throttled (>=24h apart) safety net, not a replacement for the
+		// incremental sync above — it must not run on every cron tick.
+		const reconcileStart = new Date().toISOString();
+		try {
+			if (await shouldRunHistoricalReconciliation()) {
+				const { ordersRepaired } = await reconcileHistoricalPosSales(client);
+				totalRecords += ordersRepaired;
+				await logSyncTelemetry(
+					"sales_reconciliation",
+					reconcileStart,
+					new Date().toISOString(),
+					"success",
+					ordersRepaired,
+					null,
+					0,
+					0,
+					"active",
+					{ traceId, workerId: "vercel_cron" },
+				);
+			}
+		} catch (err: any) {
+			console.error(
+				"[ODOO_CRON] Historical reconciliation error (non-fatal):",
+				err?.message,
+			);
+			await logSyncTelemetry(
+				"sales_reconciliation",
+				reconcileStart,
 				new Date().toISOString(),
 				"failed",
 				0,

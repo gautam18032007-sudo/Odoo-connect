@@ -174,14 +174,15 @@ export function LtvCacAovTab() {
 
 	const { ltvData, cacData } = data;
 	const ltv = ltvData.ltv;
-	const cac = cacData.cac;
+	const hasSpendData = Boolean(cacData.hasMarketingSpendData);
+	const cac = cacData.cac; // number | null when no marketing spend data exists
 	const aov = cacData.aov;
-	const netValue = ltv - cac;
+	const netValue = cac !== null ? ltv - cac : null;
 	const payback = cacData.paybackMonths;
 	const aovExpansion = ltvData.aovExpansionPct;
 
 	// LTV:CAC Ratio
-	const ratio = cac > 0 ? ltv / cac : 0;
+	const ratio = cac !== null && cac > 0 ? ltv / cac : 0;
 
 	// Cohort LineChart data transformation
 	const monthsList = [
@@ -303,7 +304,9 @@ export function LtvCacAovTab() {
 				<Card className="border-[0.5px] border-zinc-800 bg-zinc-950 rounded-[12px] p-5 shadow-none flex flex-col gap-1">
 					<span className="text-xs text-zinc-500 font-mono">CAC</span>
 					<span className="text-3xl font-semibold text-white font-mono mt-1">
-						{formatCurrency(Math.round(cac), { noDecimals: true })}
+						{hasSpendData
+							? formatCurrency(Math.round(cac as number), { noDecimals: true })
+							: "N/A"}
 					</span>
 				</Card>
 
@@ -321,7 +324,9 @@ export function LtvCacAovTab() {
 						Net value / customer
 					</span>
 					<span className="text-3xl font-semibold text-white font-mono mt-1">
-						{formatCurrency(Math.round(netValue), { noDecimals: true })}
+						{netValue === null
+							? "N/A"
+							: formatCurrency(Math.round(netValue), { noDecimals: true })}
 					</span>
 				</Card>
 
@@ -329,7 +334,7 @@ export function LtvCacAovTab() {
 				<Card className="border-[0.5px] border-zinc-800 bg-zinc-950 rounded-[12px] p-5 shadow-none flex flex-col gap-1">
 					<span className="text-xs text-zinc-500 font-mono">CAC payback</span>
 					<span className="text-3xl font-semibold text-white font-mono mt-1">
-						{payback} mo
+						{payback === null ? "N/A" : `${payback} mo`}
 					</span>
 				</Card>
 
@@ -348,11 +353,15 @@ export function LtvCacAovTab() {
 						LTV : CAC ratio
 					</span>
 					<span className="text-5xl font-bold font-mono tracking-tight text-emerald-500">
-						{ratio.toFixed(1)}x
+						{hasSpendData ? `${ratio.toFixed(1)}x` : "N/A"}
 					</span>
 					<div className="flex flex-col gap-1">
 						<span className="text-xs font-semibold text-emerald-500 uppercase tracking-wider font-mono">
-							{ratio >= 3.0 ? "Healthy" : "Below Target"}
+							{hasSpendData
+								? ratio >= 3.0
+									? "Healthy"
+									: "Below Target"
+								: "No spend data"}
 						</span>
 						<span className="text-[10px] text-emerald-600 font-mono">
 							Benchmark: 3-5x
@@ -498,7 +507,11 @@ export function LtvCacAovTab() {
 						<div className="flex justify-between items-center p-4 bg-zinc-950/20 text-xs font-mono">
 							<span className="text-zinc-400">CAC</span>
 							<span className="text-zinc-200 font-semibold">
-								{formatCurrency(Math.round(cac), { noDecimals: true })}
+								{hasSpendData
+									? formatCurrency(Math.round(cac as number), {
+											noDecimals: true,
+										})
+									: "N/A"}
 							</span>
 						</div>
 						<div className="flex justify-between items-center p-4 bg-zinc-950/20 text-xs font-mono">
@@ -513,7 +526,9 @@ export function LtvCacAovTab() {
 							<span className="text-zinc-200 font-semibold">
 								Payback period
 							</span>
-							<span className="text-white font-bold">{payback} months</span>
+							<span className="text-white font-bold">
+								{payback === null ? "N/A" : `${payback} months`}
+							</span>
 						</div>
 					</div>
 				</Card>

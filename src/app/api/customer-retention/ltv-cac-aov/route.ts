@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
 		// Fetch metric reports sequentially to prevent Neon socket exhaustion
 		const ltvData = await getLtvReportData(filters.store ?? null);
 		const cacData = await getCacReportData(
+			sql,
 			filters.startDate,
 			filters.endDate,
 			filters.store ?? null,

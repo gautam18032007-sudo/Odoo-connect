@@ -7,26 +7,27 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "biome lint src --diagnostic-level=error",
+    "test": "vitest run",
     "format": "biome format --write",
     "check": "npm run build && npm run lint",
     "check:fix": "biome check --write",
     "prepare": "husky",
-    "generate:presets": "ts-node -P tsconfig.scripts.json src/scripts/generate-theme-presets.ts",
-    "migrate:customer-analytics": "ts-node -P tsconfig.scripts.json src/scripts/migrate-customer-analytics.ts",
-    "refresh:mv": "ts-node -P tsconfig.scripts.json src/scripts/refresh-materialized-views.ts",
+    "generate:presets": "ts-node -P tsconfig.scripts.json src/scripts/build/generate-theme-presets.ts",
+    "migrate:customer-analytics": "ts-node -P tsconfig.scripts.json src/scripts/migrations/migrate-customer-analytics.ts",
+    "refresh:mv": "ts-node -P tsconfig.scripts.json src/scripts/sync/refresh-materialized-views.ts",
     "sync:worker": "node sync-worker.mjs",
-    "verify": "ts-node -P tsconfig.scripts.json src/scripts/verify-all.ts",
-    "verify:regression": "ts-node -P tsconfig.scripts.json src/scripts/verify-regression.ts",
-    "verify:customer-intelligence": "ts-node -P tsconfig.scripts.json src/scripts/verify-customer-intelligence.ts",
-    "verify:data-platform": "ts-node -P tsconfig.scripts.json src/scripts/verify-data-platform.ts",
-    "verify:profitability": "ts-node -P tsconfig.scripts.json src/scripts/verify-profitability.ts",
-    "verify:performance": "ts-node -P tsconfig.scripts.json src/scripts/verify-performance.ts",
-    "verify:ground-truth": "ts-node -P tsconfig.scripts.json src/scripts/verify-ground-truth.ts",
-    "verify:live": "ts-node -P tsconfig.scripts.json src/scripts/verify-live.ts",
-    "test:load": "ts-node -P tsconfig.scripts.json src/scripts/load-test.ts"
+    "verify": "ts-node -P tsconfig.scripts.json src/scripts/verification/verify-all.ts",
+    "verify:regression": "ts-node -P tsconfig.scripts.json src/scripts/verification/verify-regression.ts",
+    "verify:customer-intelligence": "ts-node -P tsconfig.scripts.json src/scripts/verification/verify-customer-intelligence.ts",
+    "verify:data-platform": "ts-node -P tsconfig.scripts.json src/scripts/verification/verify-data-platform.ts",
+    "verify:profitability": "ts-node -P tsconfig.scripts.json src/scripts/verification/verify-profitability.ts",
+    "verify:performance": "ts-node -P tsconfig.scripts.json src/scripts/verification/verify-performance.ts",
+    "verify:ground-truth": "ts-node -P tsconfig.scripts.json src/scripts/verification/verify-ground-truth.ts",
+    "verify:live": "ts-node -P tsconfig.scripts.json src/scripts/verification/verify-live.ts",
+    "test:load": "ts-node -P tsconfig.scripts.json src/scripts/verification/load-test.ts"
   },
   "lint-staged": {
-    "*.{js,ts,jsx,tsx}": [
+    "src/**/*.{js,ts,jsx,tsx}": [
       "biome check --write --no-errors-on-unmatched"
     ]
   },
@@ -86,6 +87,7 @@
     "tailwindcss": "^4.1.5",
     "ts-node": "^10.9.2",
     "tw-animate-css": "^1.4.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
   }
 }

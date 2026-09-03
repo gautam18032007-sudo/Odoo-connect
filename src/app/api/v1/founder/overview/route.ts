@@ -18,17 +18,18 @@ export async function GET(_req: NextRequest) {
 			getCrmIntelligence(),
 		]);
 
+		// repeatPurchaseRate, decliningStoresCount, and pendingProposalsCount
+		// have no data source currently wired into this endpoint — omitted
+		// rather than fabricated. Both consumers already treat a missing
+		// field as "no signal" (undefined-checked), not as zero.
 		const businessHealth = calculateBusinessHealth({
 			revenueGrowthPercent: commercial.forecast.growthTrendPercent,
-			repeatPurchaseRate: 38.5,
 			closedWonRate: crm.summary.winRate,
 		});
 
 		const hotLeads = crm.leads.filter((l: any) => l.leadBadge === "Hot").length;
 		const actions = generateFounderActions({
 			hotLeadsCount: hotLeads,
-			decliningStoresCount: 1,
-			pendingProposalsCount: 2,
 		});
 
 		const payload = {

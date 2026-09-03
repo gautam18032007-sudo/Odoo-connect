@@ -90,7 +90,7 @@ export default function LoginPage() {
 										name="username"
 										type="text"
 										autoComplete="username"
-										defaultValue="zebra"
+										defaultValue=""
 										autoFocus
 										required
 										placeholder="Username"
@@ -114,7 +114,7 @@ export default function LoginPage() {
 										name="password"
 										type={showPassword ? "text" : "password"}
 										autoComplete="current-password"
-										defaultValue="Admin@123"
+										defaultValue=""
 										required
 										placeholder="Password"
 										className="pl-9 pr-9 bg-zinc-950/60 border-zinc-800 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30"

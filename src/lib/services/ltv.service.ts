@@ -181,9 +181,28 @@ export async function getLtvAovCacTrend(
 
 	const rows = await (db as any).query(query, [store, food]);
 
-	let monthlySpend = 200000;
-	if (store === "SmartworksNoida Noida") monthlySpend = 150000;
-	else if (store === "Klj store") monthlySpend = 50000;
+	// dim_marketing_spend has no real business data source configured yet —
+	// this used to hardcode ₹200,000 / ₹150,000 / ₹50,000 by store name,
+	// which fabricated a CAC/LTV:CAC trend from numbers with no source.
+	// "No spend data" must render as unavailable, not as an invented spend
+	// figure (same data-truth fix already applied to getRetentionOverview()
+	// and getCustomerSegments() in retention.service.ts).
+	const targetStore = store || "All Stores";
+	let spendRows: Record<string, unknown>[] = [];
+	try {
+		spendRows = await db`
+			SELECT monthly_spend
+			FROM dim_marketing_spend
+			WHERE store_display_name ILIKE ${`%${targetStore}%`}
+			LIMIT 1
+		`;
+	} catch {
+		spendRows = [];
+	}
+	const hasMarketingSpendData = spendRows.length > 0;
+	const monthlySpend = hasMarketingSpendData
+		? Number(spendRows[0].monthly_spend)
+		: 0;
 
 	const monthsList = [
 		"Jan",
@@ -210,14 +229,15 @@ export async function getLtvAovCacTrend(
 
 		const aov = ordersCount > 0 ? rev / ordersCount : 0;
 		const ltv = activeCusts > 0 ? rev / activeCusts : 0;
-		const cac = monthlySpend / newCusts;
+		const cac = hasMarketingSpendData ? monthlySpend / newCusts : null;
 
 		return {
 			monthRaw: row.month_raw,
 			monthLabel,
 			ltv: Math.round(ltv),
 			aov: Math.round(aov),
-			cac: Math.round(cac),
+			cac: cac === null ? null : Math.round(cac),
+			hasMarketingSpendData,
 		};
 	});
 }

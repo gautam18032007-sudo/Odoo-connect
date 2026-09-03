@@ -32,9 +32,26 @@ export async function getCacMetrics(
 		Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
 	);
 
-	let monthlySpend = 200000;
-	if (store === "SmartworksNoida Noida") monthlySpend = 150000;
-	else if (store === "Klj store") monthlySpend = 50000;
+	// dim_marketing_spend has no real business data source configured yet —
+	// this used to hardcode ₹200,000 / ₹150,000 / ₹50,000 by store name,
+	// fabricating CAC/LTV:CAC/payback figures from numbers with no source.
+	// "No spend data" must render as unavailable, not an invented spend.
+	const targetStore = store || "All Stores";
+	let spendRows: Record<string, unknown>[] = [];
+	try {
+		spendRows = await db`
+			SELECT monthly_spend
+			FROM dim_marketing_spend
+			WHERE store_display_name ILIKE ${`%${targetStore}%`}
+			LIMIT 1
+		`;
+	} catch {
+		spendRows = [];
+	}
+	const hasMarketingSpendData = spendRows.length > 0;
+	const monthlySpend = hasMarketingSpendData
+		? Number(spendRows[0].monthly_spend)
+		: 0;
 
 	const currentSpend = Math.round((monthlySpend / 30) * days);
 
@@ -85,44 +102,59 @@ export async function getCacMetrics(
 	const currLtv = currNew > 0 ? currRevenue / currNew : 0;
 	const prevLtv = prevNew > 0 ? prevRevenue / prevNew : 0;
 
-	const currCac = currentSpend / currNew;
-	const prevCac = prevSpend / prevNew;
+	const currCac = hasMarketingSpendData ? currentSpend / currNew : null;
+	const prevCac = hasMarketingSpendData ? prevSpend / prevNew : null;
 
-	const ltvCacRatio = currCac > 0 ? currLtv / currCac : 0;
-	const prevLtvCacRatio = prevCac > 0 ? prevLtv / prevCac : 0;
+	const ltvCacRatio =
+		currCac !== null && currCac > 0 ? currLtv / currCac : null;
+	const prevLtvCacRatio =
+		prevCac !== null && prevCac > 0 ? prevLtv / prevCac : null;
 
 	const aov = currOrders > 0 ? currRevenue / currOrders : 150;
 	const monthlyGrossProfitPerCustomer = aov * 0.26 * 1.5;
-	const paybackMonths = currCac / Math.max(1, monthlyGrossProfitPerCustomer);
+	const paybackMonths =
+		currCac === null
+			? null
+			: currCac / Math.max(1, monthlyGrossProfitPerCustomer);
 
 	return {
-		totalSpend: {
-			current: currentSpend,
-			previous: prevSpend,
-			growth: growthPct(currentSpend, prevSpend),
-		},
+		hasMarketingSpendData,
+		totalSpend: hasMarketingSpendData
+			? {
+					current: currentSpend,
+					previous: prevSpend,
+					growth: growthPct(currentSpend, prevSpend),
+				}
+			: { current: null, previous: null, growth: null },
 		newCustomers: {
 			current: currNew,
 			previous: prevNew,
 			growth: growthPct(currNew, prevNew),
 		},
-		cac: {
-			current: Math.round(currCac),
-			previous: Math.round(prevCac),
-			growth: growthPct(currCac, prevCac),
-		},
-		ltvCacRatio: {
-			current: Math.round(ltvCacRatio * 10) / 10,
-			previous: Math.round(prevLtvCacRatio * 10) / 10,
-			growth: growthPct(ltvCacRatio, prevLtvCacRatio),
-		},
+		cac: hasMarketingSpendData
+			? {
+					current: Math.round(currCac as number),
+					previous: Math.round(prevCac as number),
+					growth: growthPct(currCac as number, prevCac as number),
+				}
+			: { current: null, previous: null, growth: null },
+		ltvCacRatio:
+			ltvCacRatio !== null
+				? {
+						current: Math.round(ltvCacRatio * 10) / 10,
+						previous: Math.round((prevLtvCacRatio ?? 0) * 10) / 10,
+						growth: growthPct(ltvCacRatio, prevLtvCacRatio ?? 0),
+					}
+				: { current: null, previous: null, growth: null },
 		paybackPeriod: {
-			current: Math.round(paybackMonths * 10) / 10,
+			current:
+				paybackMonths === null ? null : Math.round(paybackMonths * 10) / 10,
 		},
 	};
 }
 
 export async function getCacReportData(
+	db: FounderSql,
 	startDate: string,
 	endDate: string,
 	storeName: string | null,
@@ -134,22 +166,43 @@ export async function getCacReportData(
 		Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
 	);
 
-	// Spend function
-	const getSpendForStore = (store: string | null, daysCount: number) => {
-		let monthlySpend = 200000;
-		if (store === "SmartworksNoida Noida") monthlySpend = 150000;
-		else if (store === "Klj store") monthlySpend = 50000;
-		return Math.round((monthlySpend / 30) * daysCount);
+	// dim_marketing_spend has no real business data source configured yet —
+	// this used to hardcode ₹200,000 / ₹150,000 / ₹50,000 by store name,
+	// fabricating CAC/payback figures from numbers with no source. "No
+	// spend data" must render as unavailable, not an invented spend.
+	const getSpendForStore = async (
+		store: string | null,
+		daysCount: number,
+	): Promise<{ spend: number; hasData: boolean }> => {
+		const targetStore = store || "All Stores";
+		let spendRows: Record<string, unknown>[] = [];
+		try {
+			spendRows = await db`
+				SELECT monthly_spend
+				FROM dim_marketing_spend
+				WHERE store_display_name ILIKE ${`%${targetStore}%`}
+				LIMIT 1
+			`;
+		} catch {
+			spendRows = [];
+		}
+		if (spendRows.length === 0) return { spend: 0, hasData: false };
+		const monthlySpend = Number(spendRows[0].monthly_spend);
+		return {
+			spend: Math.round((monthlySpend / 30) * daysCount),
+			hasData: true,
+		};
 	};
 
-	const currentSpend = getSpendForStore(storeName, days);
+	const { spend: currentSpend, hasData: hasMarketingSpendData } =
+		await getSpendForStore(storeName, days);
 	const newCustomersCount = await customerRepository.getNewCustomersCount(
 		startDate,
 		endDate,
 		storeName,
 	);
 	const newCustomers = Math.max(1, newCustomersCount);
-	const cac = currentSpend / newCustomers;
+	const cac = hasMarketingSpendData ? currentSpend / newCustomers : null;
 
 	const aovMetrics = await customerRepository.getAovMetrics(
 		startDate,
@@ -159,7 +212,8 @@ export async function getCacReportData(
 	const aov = aovMetrics.bills > 0 ? aovMetrics.revenue / aovMetrics.bills : 0;
 
 	const avgMonthlyMargin = aov * 0.26 * 1.5;
-	const paybackMonths = avgMonthlyMargin > 0 ? cac / avgMonthlyMargin : 0;
+	const paybackMonths =
+		cac !== null && avgMonthlyMargin > 0 ? cac / avgMonthlyMargin : null;
 
 	const storeOptions = [
 		{ name: "Smart Works Noida", key: "SmartworksNoida Noida" },
@@ -169,14 +223,17 @@ export async function getCacReportData(
 
 	const paybackTable = await Promise.all(
 		storeOptions.map(async (opt) => {
-			const sSpend = getSpendForStore(opt.key, days);
+			const { spend: sSpend, hasData: sHasData } = await getSpendForStore(
+				opt.key,
+				days,
+			);
 			const sNewCount = await customerRepository.getNewCustomersCount(
 				startDate,
 				endDate,
 				opt.key,
 			);
 			const sNew = Math.max(1, sNewCount);
-			const sCac = sSpend / sNew;
+			const sCac = sHasData ? sSpend / sNew : null;
 			const sAovMetrics = await customerRepository.getAovMetrics(
 				startDate,
 				endDate,
@@ -185,26 +242,29 @@ export async function getCacReportData(
 			const sAov =
 				sAovMetrics.bills > 0 ? sAovMetrics.revenue / sAovMetrics.bills : 0;
 			const sMargin = sAov * 0.26 * 1.5;
-			const sPayback = sMargin > 0 ? sCac / sMargin : 0;
+			const sPayback = sCac !== null && sMargin > 0 ? sCac / sMargin : null;
 
 			return {
 				storeName: opt.name,
-				spend: sSpend,
+				hasMarketingSpendData: sHasData,
+				spend: sHasData ? sSpend : null,
 				newCustomers: sNewCount,
-				cac: Math.round(sCac),
+				cac: sCac === null ? null : Math.round(sCac),
 				aov: Math.round(sAov),
 				margin: Math.round(sMargin),
-				payback: Math.round(sPayback * 10) / 10,
+				payback: sPayback === null ? null : Math.round(sPayback * 10) / 10,
 			};
 		}),
 	);
 
 	return {
-		spend: currentSpend,
+		hasMarketingSpendData,
+		spend: hasMarketingSpendData ? currentSpend : null,
 		newCustomers: newCustomersCount,
-		cac: Math.round(cac),
+		cac: cac === null ? null : Math.round(cac),
 		aov: Math.round(aov),
-		paybackMonths: Math.round(paybackMonths * 10) / 10,
+		paybackMonths:
+			paybackMonths === null ? null : Math.round(paybackMonths * 10) / 10,
 		paybackTable,
 	};
 }

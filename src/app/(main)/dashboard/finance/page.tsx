@@ -99,7 +99,8 @@ export default function FinancePage() {
 		totalRevenue = 0,
 		totalPurchaseSpend = 0,
 		grossMargin = 0,
-		grossMarginPercent = 0,
+		grossMarginPercent = null,
+		hasPurchaseData = false,
 		openPurchaseOrdersCount = 0,
 		openPurchaseOrdersValue = 0,
 		recentPurchaseOrders = [],
@@ -189,10 +190,16 @@ export default function FinancePage() {
 							</div>
 						</div>
 						<div className="text-2xl font-bold font-mono tracking-tight">
-							{formatCurrency(grossMargin)}
+							{hasPurchaseData ? formatCurrency(grossMargin) : "N/A"}
 						</div>
 						<div className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 font-medium">
-							<span>{grossMarginPercent.toFixed(1)}% Net Margin</span>
+							{hasPurchaseData && grossMarginPercent !== null ? (
+								<span>{grossMarginPercent.toFixed(1)}% Net Margin</span>
+							) : (
+								<span className="text-muted-foreground">
+									No purchase order data recorded yet
+								</span>
+							)}
 						</div>
 					</CardContent>
 				</Card>

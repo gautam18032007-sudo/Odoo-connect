@@ -25,6 +25,7 @@ import { formatCurrency } from "@/lib/utils";
 export function CacTab({ hasData }: { hasData: boolean }) {
 	const { data, isLoading } = useCAC(hasData);
 
+	const hasSpendData = Boolean(data?.hasMarketingSpendData);
 	const spend = data?.totalSpend;
 	const newCust = data?.newCustomers;
 	const cac = data?.cac;
@@ -32,7 +33,7 @@ export function CacTab({ hasData }: { hasData: boolean }) {
 	const payback = data?.paybackPeriod;
 
 	const ratioRating = useMemo(() => {
-		if (!ratio)
+		if (!ratio || ratio.current == null)
 			return {
 				label: "Unknown",
 				color: "text-gray-500",
@@ -84,9 +85,15 @@ export function CacTab({ hasData }: { hasData: boolean }) {
 			<div className="grid gap-4 grid-cols-1 md:grid-cols-3">
 				<MetricCard
 					title="Total Marketing Spend"
-					value={formatCurrency(spend?.current || 0, { noDecimals: true })}
-					growth={spend?.growth}
-					comparisonLabel="vs last period"
+					value={
+						hasSpendData
+							? formatCurrency(spend?.current || 0, { noDecimals: true })
+							: "N/A"
+					}
+					growth={hasSpendData ? spend?.growth : undefined}
+					comparisonLabel={
+						hasSpendData ? "vs last period" : "No marketing spend data recorded"
+					}
 					icon={DollarSign}
 				/>
 				<MetricCard
@@ -98,9 +105,17 @@ export function CacTab({ hasData }: { hasData: boolean }) {
 				/>
 				<MetricCard
 					title="Customer Acquisition Cost"
-					value={formatCurrency(cac?.current || 0, { noDecimals: true })}
-					growth={cac?.growth}
-					comparisonLabel="Spend / New Customers"
+					value={
+						hasSpendData
+							? formatCurrency(cac?.current || 0, { noDecimals: true })
+							: "N/A"
+					}
+					growth={hasSpendData ? cac?.growth : undefined}
+					comparisonLabel={
+						hasSpendData
+							? "Spend / New Customers"
+							: "No marketing spend data recorded"
+					}
 					icon={TrendingUp}
 				/>
 			</div>
@@ -133,7 +148,7 @@ export function CacTab({ hasData }: { hasData: boolean }) {
 
 						<div className="flex items-baseline gap-2 mt-2">
 							<span className="text-5xl font-black font-mono tracking-tight text-foreground">
-								{ratio?.current}x
+								{hasSpendData ? `${ratio?.current}x` : "N/A"}
 							</span>
 							<div
 								className={`px-2.5 py-0.5 rounded-full border text-xs font-semibold ${ratioRating.bg} ${ratioRating.color}`}
@@ -143,9 +158,9 @@ export function CacTab({ hasData }: { hasData: boolean }) {
 						</div>
 
 						<p className="text-xs text-muted-foreground leading-relaxed">
-							A ratio of {ratio?.current}x indicates that every rupee invested
-							in customer acquisition yields {ratio?.current} rupees in lifetime
-							sales value.
+							{hasSpendData
+								? `A ratio of ${ratio?.current}x indicates that every rupee invested in customer acquisition yields ${ratio?.current} rupees in lifetime sales value.`
+								: "No marketing spend data has been recorded, so an LTV:CAC ratio cannot be calculated."}
 						</p>
 					</div>
 
@@ -189,17 +204,19 @@ export function CacTab({ hasData }: { hasData: boolean }) {
 
 						<div className="flex items-baseline gap-2 mt-2">
 							<span className="text-5xl font-black font-mono tracking-tight text-foreground">
-								{payback?.current}
+								{hasSpendData ? payback?.current : "N/A"}
 							</span>
-							<span className="text-sm font-semibold text-muted-foreground">
-								Months
-							</span>
+							{hasSpendData && (
+								<span className="text-sm font-semibold text-muted-foreground">
+									Months
+								</span>
+							)}
 						</div>
 
 						<p className="text-xs text-muted-foreground leading-relaxed">
-							ZenZebra recovers the ₹{cac?.current} acquisition cost in exactly{" "}
-							{payback?.current} months, after which the customer is
-							contributing net positive profits to operations.
+							{hasSpendData
+								? `ZenZebra recovers the ₹${cac?.current} acquisition cost in exactly ${payback?.current} months, after which the customer is contributing net positive profits to operations.`
+								: "No marketing spend data has been recorded, so a payback period cannot be calculated."}
 						</p>
 					</div>
 

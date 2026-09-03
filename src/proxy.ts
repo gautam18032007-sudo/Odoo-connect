@@ -1,5 +1,16 @@
 import crypto from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
+import { validateSession } from "@/lib/auth";
+
+// Proxy files (Next.js 16's middleware equivalent) always run on the
+// Node.js runtime — confirmed via build error when an explicit runtime
+// segment config was declared here ("Route segment config is not allowed
+// in Proxy file... Proxy always runs on Node.js runtime"). That resolves
+// the only real architectural risk in this fix: validateSession() needs a
+// DB round-trip (Neon serverless driver) and transitively loads
+// @node-rs/argon2 (a native compiled addon) via auth.ts's top-level
+// imports — neither would work under an Edge/V8-isolate runtime, but
+// neither is a concern here since Node.js is the only runtime available.
 
 // Routes that don't require authentication
 const publicPaths = [
@@ -61,7 +72,18 @@ export default async function proxy(req: NextRequest) {
 		return NextResponse.redirect(new URL("/login", req.url));
 	}
 
-	// Verify session token presence without blocking loopback HTTP self-fetch
+	// A cookie merely being present proves nothing — validate it against the
+	// sessions table (hash, expiry, existence) the same way getCurrentUser()
+	// already does for the one route that previously bothered to check. A
+	// forged/random/expired/deleted token must fail here, not pass through.
+	const user = await validateSession(sessionToken);
+	if (!user) {
+		if (pathname.startsWith("/api/")) {
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		}
+		return NextResponse.redirect(new URL("/login", req.url));
+	}
+
 	return NextResponse.next();
 }
 

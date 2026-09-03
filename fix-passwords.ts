@@ -1,60 +1,35 @@
-import * as dotenv from "dotenv";
-import path from "path";
+/**
+ * RETIRED — this script is intentionally disabled and must never run.
+ *
+ * The original version of this file:
+ *   1. Read the real password_hash for the "zebra" user directly from the
+ *      production database.
+ *   2. Tested it against a hardcoded plaintext password string (redacted
+ *      here; see git history if the exact value is ever needed for
+ *      rotation purposes).
+ *   3. If it didn't match, AUTOMATICALLY and UNCONDITIONALLY reset the
+ *      password_hash for "zebra", "diwakarpro01", and "gautam12" to that
+ *      same hardcoded value — no confirmation, no dry-run, no scoping.
+ *
+ * That is exactly the class of destructive/dangerous script this project's
+ * security audits have repeatedly flagged and fixed elsewhere (see
+ * src/scripts/clear-odoo-tables.ts, delete-batch-3.ts,
+ * remap-billed-by-ground-truth.ts, backfill-billed-by.ts for the same
+ * remediation pattern). This file was never referenced by package.json,
+ * CI, deployment, or any other script — confirmed dead/unused before
+ * retirement — so it is fully disabled rather than "fixed," per this
+ * project's established practice of retiring unused destructive scripts
+ * outright instead of leaving a weakened-but-still-dangerous version.
+ *
+ * The original source is preserved in git history for audit purposes —
+ * `git log --oneline -- fix-passwords.ts` then `git show <commit>:fix-passwords.ts`.
+ * It must not be restored or re-enabled. If a legitimate password-reset
+ * tool is ever needed, it must require an explicit, externally-supplied
+ * new password (e.g. via a required environment variable checked for
+ * presence, never a hardcoded literal), operate on exactly one named user
+ * passed as an explicit argument, and never silently touch other accounts.
+ */
 
-dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
-
-import { neon } from "@neondatabase/serverless";
-import { hash as argon2Hash, verify as argon2Verify } from "@node-rs/argon2";
-
-const ARGON2_OPTIONS = {
-	algorithm: 2,
-	memoryCost: 65536,
-	timeCost: 3,
-	parallelism: 4,
-} as const;
-
-const sql = neon(process.env.DATABASE_URL!);
-
-async function main() {
-	try {
-		// Get the password hash for 'zebra'
-		const users =
-			await sql`SELECT id, username, password_hash FROM users WHERE username = 'zebra'`;
-		const user = users[0] as any;
-		console.log("User found:", { id: user.id, username: user.username });
-
-		// Test if 'zebra123' matches
-		const matches = await argon2Verify(
-			user.password_hash,
-			"zebra123",
-			ARGON2_OPTIONS,
-		);
-		console.log("Does 'zebra123' match the stored hash?", matches);
-
-		if (!matches) {
-			console.log(
-				"\n❌ Password does NOT match. Resetting all passwords to 'zebra123'...",
-			);
-			const newHash = await argon2Hash("zebra123", ARGON2_OPTIONS);
-
-			await sql`UPDATE users SET password_hash = ${newHash} WHERE username = 'zebra'`;
-			await sql`UPDATE users SET password_hash = ${newHash} WHERE username = 'diwakarpro01'`;
-			await sql`UPDATE users SET password_hash = ${newHash} WHERE username = 'gautam12'`;
-
-			// Verify the fix
-			const verify = await argon2Verify(newHash, "zebra123", ARGON2_OPTIONS);
-			console.log("✅ New hash verified:", verify);
-			console.log(
-				"✅ All user passwords reset to 'zebra123'. You can now login!",
-			);
-		} else {
-			console.log(
-				"✅ Password already matches 'zebra123'. Checking login route logic...",
-			);
-		}
-	} catch (err: any) {
-		console.error("Error:", err.message);
-	}
-}
-
-main();
+throw new Error(
+	"fix-passwords.ts is retired and must not be executed. See the header comment in this file for why, and for the safe alternative pattern.",
+);

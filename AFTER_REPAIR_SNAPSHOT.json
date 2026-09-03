@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-09-03T08:44:08.652Z",
+  "fact_sales_orders": {
+    "rows": 5266,
+    "coll": 679597.36,
+    "net": 621257.59
+  },
+  "fact_sales_lines": {
+    "rows": 9652
+  },
+  "sales_fact": {
+    "rows": 23331
+  },
+  "sales_fact_v": {
+    "rows": 32983,
+    "gross": 3263637.44,
+    "tax": 385851.2,
+    "net": 2877786.24,
+    "orders": 19901,
+    "custs": 2955
+  },
+  "july_fact_sales_orders_done": {
+    "n": 1579,
+    "coll": 200925.2
+  },
+  "orphan_lines": {
+    "n": 0
+  }
+}

@@ -142,8 +142,10 @@ export async function getRetentionOverview(
 	} catch {
 		spendRows = [];
 	}
-	const monthlySpend =
-		spendRows.length > 0 ? Number(spendRows[0].monthly_spend) : 0;
+	const hasMarketingSpendData = spendRows.length > 0;
+	const monthlySpend = hasMarketingSpendData
+		? Number(spendRows[0].monthly_spend)
+		: 0;
 	const currentSpend = Math.round((monthlySpend / 30) * days);
 
 	const prevStart = new Date(periods.previousStart);
@@ -216,16 +218,21 @@ export async function getRetentionOverview(
 			previous: Math.round(prevLtv),
 			growth: growthPct(currLtv, prevLtv),
 		},
-		cac: {
-			current: Math.round(currCac),
-			previous: Math.round(prevCac),
-			growth: growthPct(currCac, prevCac),
-		},
-		ltvCacRatio: {
-			current: Math.round(ltvCacRatio * 10) / 10,
-			previous: Math.round(prevLtvCacRatio * 10) / 10,
-			growth: growthPct(ltvCacRatio, prevLtvCacRatio),
-		},
+		cac: hasMarketingSpendData
+			? {
+					current: Math.round(currCac),
+					previous: Math.round(prevCac),
+					growth: growthPct(currCac, prevCac),
+				}
+			: { current: null, previous: null, growth: null },
+		hasMarketingSpendData,
+		ltvCacRatio: hasMarketingSpendData
+			? {
+					current: Math.round(ltvCacRatio * 10) / 10,
+					previous: Math.round(prevLtvCacRatio * 10) / 10,
+					growth: growthPct(ltvCacRatio, prevLtvCacRatio),
+				}
+			: { current: null, previous: null, growth: null },
 		avgAov: {
 			current: Math.round(currAov),
 			previous: Math.round(prevAov),
@@ -315,7 +322,9 @@ export async function getAiInsights(
 	return [
 		`Retention ${rateStr} vs last month`,
 		"Customers acquired in March show highest repeat purchases",
-		`LTV:CAC currently ${overview.ltvCacRatio.current}x - ${overview.ltvCacRatio.current >= 3 ? "Healthy growth benchmark exceeded" : "Consider acquisition optimizations"}`,
+		overview.hasMarketingSpendData
+			? `LTV:CAC currently ${overview.ltvCacRatio.current}x - ${(overview.ltvCacRatio.current ?? 0) >= 3 ? "Healthy growth benchmark exceeded" : "Consider acquisition optimizations"}`
+			: "LTV:CAC unavailable — no marketing spend data recorded",
 		`Returning customers contribute ${Math.min(100, Math.max(0, returningRevShare))}% revenue`,
 	];
 }
@@ -424,17 +433,20 @@ export async function getCustomerSegments(
 	} catch {
 		spendRows = [];
 	}
-	const monthlySpend =
-		spendRows.length > 0 ? Number(spendRows[0].monthly_spend) : 0;
+	const hasMarketingSpendData = spendRows.length > 0;
+	const monthlySpend = hasMarketingSpendData
+		? Number(spendRows[0].monthly_spend)
+		: 0;
 	const spend = Math.round((monthlySpend / 30) * days);
-	const cac = spend / Math.max(1, newCount);
+	const cac = hasMarketingSpendData ? spend / Math.max(1, newCount) : null;
 
 	return {
 		newCustomers: {
 			count: newCount,
 			revenue: Math.round(newRevenue),
 			aov: Math.round(newAov),
-			cac: Math.round(cac),
+			cac: cac === null ? null : Math.round(cac),
+			hasMarketingSpendData,
 			orders: newOrders,
 		},
 		returningCustomers: {

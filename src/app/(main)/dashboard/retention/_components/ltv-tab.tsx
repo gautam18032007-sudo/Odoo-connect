@@ -86,8 +86,15 @@ export function LtvTab({ hasData }: { hasData: boolean }) {
 	// Blended LTV, AOV, CAC metrics
 	const summaryStats = useMemo(() => {
 		if (!overview) {
-			return { avgLtv: 0, avgAov: 0, cac: 0, ratio: "0:1" };
+			return {
+				avgLtv: 0,
+				avgAov: 0,
+				cac: 0,
+				ratio: "0:1",
+				hasSpendData: false,
+			};
 		}
+		const hasSpendData = Boolean(overview.hasMarketingSpendData);
 		const avgLtv = Math.round(overview.ltv?.current || 0);
 		const cac = Math.round(overview.cac?.current || 0);
 		const totalRevenue = overview.meta?.totalRevenue || 0;
@@ -103,12 +110,13 @@ export function LtvTab({ hasData }: { hasData: boolean }) {
 				? Math.round(totalRevenue / totalOrders)
 				: Math.round(avgLtv / (overview.avgOrdersPerCustomer?.current || 1));
 
-		const ratioNum =
-			overview.ltvCacRatio?.current ||
-			(cac > 0 ? Math.round((avgLtv / cac) * 10) / 10 : 0);
-		const ratio = `${ratioNum}:1`;
+		const ratioNum = hasSpendData
+			? overview.ltvCacRatio?.current ||
+				(cac > 0 ? Math.round((avgLtv / cac) * 10) / 10 : 0)
+			: null;
+		const ratio = ratioNum === null ? "N/A" : `${ratioNum}:1`;
 
-		return { avgLtv, avgAov, cac, ratio };
+		return { avgLtv, avgAov, cac, ratio, hasSpendData };
 	}, [overview, topCustomers]);
 
 	// Interactive Filters for Customer Table
@@ -263,8 +271,16 @@ export function LtvTab({ hasData }: { hasData: boolean }) {
 				/>
 				<MetricCard
 					title="CAC"
-					value={formatCurrency(summaryStats.cac, { noDecimals: true })}
-					comparisonLabel="Acquisition marketing cost"
+					value={
+						summaryStats.hasSpendData
+							? formatCurrency(summaryStats.cac, { noDecimals: true })
+							: "N/A"
+					}
+					comparisonLabel={
+						summaryStats.hasSpendData
+							? "Acquisition marketing cost"
+							: "No marketing spend data recorded"
+					}
 					icon={Users}
 				/>
 				<MetricCard

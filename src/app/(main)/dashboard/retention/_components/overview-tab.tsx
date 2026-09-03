@@ -39,14 +39,22 @@ export function OverviewTab({ hasData }: { hasData: boolean }) {
 
 	const summaryStats = useMemo(() => {
 		if (!overview) {
-			return { avgLtv: 0, avgAov: 0, cac: 0, ratio: "0:1" };
+			return {
+				avgLtv: 0,
+				avgAov: 0,
+				cac: 0,
+				ratio: "0:1",
+				hasSpendData: false,
+			};
 		}
 
+		const hasSpendData = Boolean(overview.hasMarketingSpendData);
 		return {
 			avgLtv: Math.round(overview.ltv?.current || 0),
 			avgAov: Math.round(overview.avgAov?.current || 0),
 			cac: Math.round(overview.cac?.current || 0),
-			ratio: `${overview.ltvCacRatio?.current || 0}:1`,
+			ratio: hasSpendData ? `${overview.ltvCacRatio?.current || 0}:1` : "N/A",
+			hasSpendData,
 		};
 	}, [overview]);
 
@@ -69,9 +77,17 @@ export function OverviewTab({ hasData }: { hasData: boolean }) {
 				/>
 				<MetricCard
 					title="Average CAC"
-					value={formatCurrency(summaryStats.cac, { noDecimals: true })}
-					growth={overview?.cac?.growth}
-					comparisonLabel="Cost to acquire a new customer"
+					value={
+						summaryStats.hasSpendData
+							? formatCurrency(summaryStats.cac, { noDecimals: true })
+							: "N/A"
+					}
+					growth={summaryStats.hasSpendData ? overview?.cac?.growth : undefined}
+					comparisonLabel={
+						summaryStats.hasSpendData
+							? "Cost to acquire a new customer"
+							: "No marketing spend data recorded"
+					}
 					icon={Users}
 				/>
 			</div>

@@ -1,0 +1,46 @@
+[
+  {
+    "date": "2026-07-18",
+    "excelRows": 52,
+    "excelBills": 24,
+    "excelGross": 10265.3,
+    "neonRows": 0,
+    "neonBills": 0,
+    "neonGross": 0,
+    "variance": 10265.3,
+    "expectedGap": true
+  },
+  {
+    "date": "2026-07-19",
+    "excelRows": 12,
+    "excelBills": 1,
+    "excelGross": 1733,
+    "neonRows": 0,
+    "neonBills": 0,
+    "neonGross": 0,
+    "variance": 1733,
+    "expectedGap": true
+  },
+  {
+    "date": "2026-07-20",
+    "excelRows": 52,
+    "excelBills": 32,
+    "excelGross": 7062.299999999999,
+    "neonRows": 0,
+    "neonBills": 0,
+    "neonGross": 0,
+    "variance": 7062.299999999999,
+    "expectedGap": true
+  },
+  {
+    "date": "2026-07-21",
+    "excelRows": 16,
+    "excelBills": 11,
+    "excelGross": 1474,
+    "neonRows": 0,
+    "neonBills": 0,
+    "neonGross": 0,
+    "variance": 1474,
+    "expectedGap": true
+  }
+]

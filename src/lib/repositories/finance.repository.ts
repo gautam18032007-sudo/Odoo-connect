@@ -20,7 +20,10 @@ export interface FinanceSummary {
 	totalRevenue: number;
 	totalPurchaseSpend: number;
 	grossMargin: number;
-	grossMarginPercent: number;
+	/** null when no purchase-order data exists at all — 0 cost is not the
+	 * same as unknown cost, and must never be displayed as a 100% margin. */
+	grossMarginPercent: number | null;
+	hasPurchaseData: boolean;
 	openPurchaseOrdersCount: number;
 	openPurchaseOrdersValue: number;
 	recentPurchaseOrders: PurchaseOrder[];
@@ -74,13 +77,20 @@ export async function getFinanceSummary(filters?: {
 		`;
 
 		const poStat = poRes[0] || {};
+		const totalPurchaseOrders = Number(poStat.totalOrders || 0);
 		const totalPurchaseSpend = Number(poStat.totalPurchaseSpend || 0);
 		const openPurchaseOrdersCount = Number(poStat.openCount || 0);
 		const openPurchaseOrdersValue = Number(poStat.openValue || 0);
 
+		// No purchase-order data at all is NOT the same as zero cost — a
+		// "100% margin" here would falsely claim zero cost of goods rather
+		// than "no cost data recorded yet" (data-truth remediation).
+		const hasPurchaseData = totalPurchaseOrders > 0;
 		const grossMargin = totalRevenue - totalPurchaseSpend;
 		const grossMarginPercent =
-			totalRevenue > 0 ? (grossMargin / totalRevenue) * 100 : 0;
+			hasPurchaseData && totalRevenue > 0
+				? (grossMargin / totalRevenue) * 100
+				: null;
 
 		// Fetch recent POs
 		const recentPOs = await sql`
@@ -120,6 +130,7 @@ export async function getFinanceSummary(filters?: {
 			totalPurchaseSpend,
 			grossMargin,
 			grossMarginPercent,
+			hasPurchaseData,
 			openPurchaseOrdersCount,
 			openPurchaseOrdersValue,
 			recentPurchaseOrders: recentPOs as PurchaseOrder[],
@@ -130,12 +141,15 @@ export async function getFinanceSummary(filters?: {
 			})),
 		};
 	} catch (err) {
-		console.warn("DB query for finance summary failed:", err);
+		console.error("DB query for finance summary failed:", err);
+		// A query failure must never present as "revenue/margin are zero" —
+		// null/hasPurchaseData:false signals unavailable, not a real result.
 		return {
 			totalRevenue: 0,
 			totalPurchaseSpend: 0,
 			grossMargin: 0,
-			grossMarginPercent: 0,
+			grossMarginPercent: null,
+			hasPurchaseData: false,
 			openPurchaseOrdersCount: 0,
 			openPurchaseOrdersValue: 0,
 			recentPurchaseOrders: [],

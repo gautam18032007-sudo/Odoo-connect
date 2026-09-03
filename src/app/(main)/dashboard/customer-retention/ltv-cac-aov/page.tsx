@@ -10,6 +10,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { sql } from "@/lib/db";
 import { getCacReportData } from "@/lib/services/cac.service";
 import { getLtvReportData } from "@/lib/services/ltv.service";
 import { formatCurrency } from "@/lib/utils";
@@ -35,15 +36,18 @@ export default async function LtvCacAovPage({ searchParams }: PageProps) {
 
 	// Fetch report data sequentially on the server
 	const ltvData = await getLtvReportData(storeParam);
-	const cacData = await getCacReportData(startDate, endDate, storeParam);
+	const cacData = await getCacReportData(sql, startDate, endDate, storeParam);
 
 	const ltv = ltvData.ltv;
-	const cac = cacData.cac;
+	const hasMarketingSpendData = cacData.hasMarketingSpendData;
+	const cac = cacData.cac; // number | null when no marketing spend data exists
 	const aov = cacData.aov;
 
 	// LTV:CAC Ratio
-	const ltvCacRatio = cac > 0 ? ltv / cac : 0;
-	const formattedRatio = `${ltvCacRatio.toFixed(1)}x`;
+	const ltvCacRatio = cac !== null && cac > 0 ? ltv / cac : 0;
+	const formattedRatio = hasMarketingSpendData
+		? `${ltvCacRatio.toFixed(1)}x`
+		: "N/A";
 
 	// Classification for ratio
 	let ratioBadge = {
@@ -69,7 +73,7 @@ export default async function LtvCacAovPage({ searchParams }: PageProps) {
 	}
 
 	// Net value per customer (LTV - CAC)
-	const netValue = ltv - cac;
+	const netValue = cac !== null ? ltv - cac : null;
 
 	// AOV expansion percentage
 	const aovExpansion = ltvData.aovExpansionPct;
@@ -189,10 +193,14 @@ export default async function LtvCacAovPage({ searchParams }: PageProps) {
 						Acquisition Cost (CAC)
 					</span>
 					<span className="text-3xl font-semibold text-white font-mono">
-						{formatCurrency(Math.round(cac), { noDecimals: true })}
+						{cac === null
+							? "N/A"
+							: formatCurrency(Math.round(cac), { noDecimals: true })}
 					</span>
 					<span className="text-[10px] text-zinc-600">
-						Spend per new customer acquired in period
+						{cac === null
+							? "No marketing spend data recorded"
+							: "Spend per new customer acquired in period"}
 					</span>
 				</Card>
 
@@ -216,7 +224,9 @@ export default async function LtvCacAovPage({ searchParams }: PageProps) {
 						Net Value per Customer
 					</span>
 					<span className="text-3xl font-semibold text-white font-mono">
-						{formatCurrency(Math.round(netValue), { noDecimals: true })}
+						{netValue === null
+							? "N/A"
+							: formatCurrency(Math.round(netValue), { noDecimals: true })}
 					</span>
 					<span className="text-[10px] text-zinc-600">
 						Lifetime value net of acquisition cost (LTV - CAC)
@@ -299,7 +309,9 @@ export default async function LtvCacAovPage({ searchParams }: PageProps) {
 										{row.storeName}
 									</TableCell>
 									<TableCell className="text-xs text-right font-mono py-3 text-zinc-300">
-										{formatCurrency(row.cac, { noDecimals: true })}
+										{row.cac === null
+											? "N/A"
+											: formatCurrency(row.cac, { noDecimals: true })}
 									</TableCell>
 									<TableCell className="text-xs text-right font-mono py-3 text-zinc-300">
 										{formatCurrency(row.aov, { noDecimals: true })}
