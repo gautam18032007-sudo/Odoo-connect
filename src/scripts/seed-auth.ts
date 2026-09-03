@@ -22,30 +22,23 @@ async function seed() {
 
 	const sql = neon(process.env.DATABASE_URL);
 
+	// Security remediation (DEFECT-110, Phase 2): no account here has a
+	// hardcoded password — every seeded account gets its own random,
+	// generated-at-run-time password, printed once and never stored in
+	// source control. `users` was confirmed empty (0 rows) at the time of
+	// this fix, so no existing login is affected by this change.
 	const users = [
 		{ employee_id: "EMP001", name: "Diwakar Bhagat", username: "diwakarpro01" },
-		{
-			employee_id: "EMP002",
-			name: "Gautam",
-			username: "gautam12",
-			password: "zebra123",
-		},
-		{
-			employee_id: "ZEBRA001",
-			name: "Zebra",
-			username: "zebra",
-			password: "zebra123",
-		},
+		{ employee_id: "EMP002", name: "Gautam", username: "gautam12" },
+		{ employee_id: "ZEBRA001", name: "Zebra", username: "zebra" },
 	];
 
 	console.log("\n=== ZenZebra Auth Seed ===\n");
 	console.log("Generating credentials...\n");
 
 	for (const user of users) {
-		// Use provided password or generate a random 12-char password
-		const password =
-			(user as any).password ||
-			crypto.randomBytes(8).toString("base64url").slice(0, 12);
+		// Every account gets a fresh, randomly generated 12-char password.
+		const password = crypto.randomBytes(8).toString("base64url").slice(0, 12);
 
 		// Hash with Argon2id
 		const passwordHash = await hash(password, ARGON2_OPTIONS);

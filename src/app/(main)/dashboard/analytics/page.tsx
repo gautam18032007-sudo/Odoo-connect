@@ -12,9 +12,7 @@ import { useFilterStore } from "@/stores/founder/filter-store";
 
 import { AnalyticsKpiStrip } from "./_components/analytics-kpi-strip";
 import { AnalyticsToolbar } from "./_components/analytics-toolbar";
-import { RealtimeVisitors } from "./_components/realtime-visitors";
 import { TopPages } from "./_components/top-pages";
-import { TopTrafficSources } from "./_components/top-traffic-sources";
 import { TrafficQuality } from "./_components/traffic-quality";
 
 // Import flag icons styling
@@ -165,23 +163,9 @@ export default function Page() {
 					<TabsContent value="overview" className="flex flex-col gap-4">
 						<AnalyticsKpiStrip data={data} />
 
-						<div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-12">
-							<div className="xl:col-span-7">
-								<TrafficQuality data={data} />
-							</div>
-							<div className="xl:col-span-5">
-								<RealtimeVisitors />
-							</div>
-						</div>
+						<TrafficQuality data={data} />
 
-						<div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-12">
-							<div className="xl:col-span-7">
-								<TopPages data={data} />
-							</div>
-							<div className="xl:col-span-5 xl:col-start-8">
-								<TopTrafficSources data={data} />
-							</div>
-						</div>
+						<TopPages data={data} />
 					</TabsContent>
 
 					<TabsContent value="audience">

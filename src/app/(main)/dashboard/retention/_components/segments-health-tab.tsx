@@ -122,35 +122,32 @@ function classifySegment(customer: CustomerHealthEntry) {
 	return "Regular";
 }
 
-function buildAovTrend(customers: CustomerHealthEntry[]) {
-	const averageAov =
-		customers.reduce((total, customer) => total + (customer.aov ?? 0), 0) /
-		Math.max(1, customers.length);
-	const base = Math.max(averageAov, 1000);
+type MonthlyAovPoint = {
+	month: string;
+	aov: number;
+	revenue: number;
+	orders: number;
+};
+
+/**
+ * Data-truth remediation, FINDING-201: this used to fabricate a fixed
+ * 6-month Jan-Jun series with a hardcoded multiplier curve. Now derives the
+ * "Increasing/Decreasing/Stable" badge from the real monthly AOV series
+ * (getMonthlyAovTrend, sourced from sales_fact_v) instead of synthesizing
+ * data — no series is invented; an empty/short real series just yields
+ * "Stable" and an empty or partial chart.
+ */
+function summarizeAovTrend(series: MonthlyAovPoint[]) {
 	let status: "Stable" | "Increasing" | "Decreasing" = "Stable";
-	const firstValue = base * 0.96;
-	const lastValue = base * 1.04;
-
-	if (lastValue > firstValue * 1.08) {
-		status = "Increasing";
-	} else if (lastValue < firstValue * 0.92) {
-		status = "Decreasing";
+	if (series.length >= 2) {
+		const first = series[0].aov;
+		const last = series[series.length - 1].aov;
+		if (first > 0) {
+			if (last > first * 1.08) status = "Increasing";
+			else if (last < first * 0.92) status = "Decreasing";
+		}
 	}
-
-	const multipliers =
-		status === "Increasing"
-			? [0.94, 0.99, 1.06, 1.12, 1.18, 1.24]
-			: status === "Decreasing"
-				? [1.24, 1.18, 1.12, 1.06, 0.99, 0.94]
-				: [0.96, 1.02, 0.98, 1.01, 0.99, 1.0];
-
-	return {
-		status,
-		series: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"].map((month, index) => ({
-			month,
-			aov: Math.round(base * multipliers[index]),
-		})),
-	};
+	return { status, series };
 }
 
 export function SegmentsHealthTab({ hasData }: { hasData: boolean }) {
@@ -264,8 +261,8 @@ export function SegmentsHealthTab({ hasData }: { hasData: boolean }) {
 	}, [averageHealthScore]);
 
 	const aovTrend = useMemo(
-		() => buildAovTrend(enrichedCustomers),
-		[enrichedCustomers],
+		() => summarizeAovTrend(healthData?.monthlyAovTrend ?? []),
+		[healthData?.monthlyAovTrend],
 	);
 	const total = Math.max(1, enrichedCustomers.length || healthData?.total || 1);
 

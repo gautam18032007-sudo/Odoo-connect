@@ -152,28 +152,11 @@ export default function Page() {
 	}
 
 	const formattedDate = format(new Date(), "EEEE, do MMMM yyyy");
-	const leadsList =
-		crmData?.leads && crmData.leads.length > 0
-			? crmData.leads
-			: (data?.recentOrders || []).map((ord: any, idx: number) => ({
-					id: ord.id || idx,
-					name: `Deal - ${ord.productName || "Product Order"}`,
-					partnerName: `Customer ${ord.customerId}`,
-					phone: ord.customerId,
-					stage:
-						idx % 5 === 4
-							? "Closed Won"
-							: idx % 5 === 0
-								? "Qualified"
-								: idx % 5 === 1
-									? "Discovery"
-									: idx % 5 === 2
-										? "Proposal Sent"
-										: "Negotiation",
-					expectedRevenue: ord.netAmount || 5000,
-					store: ord.store || "KLJ",
-					health: idx % 4 === 0 ? "On Track" : "Needs Review",
-				}));
+	// Only crm_leads is a legitimate CRM data source. Sales orders are NOT
+	// CRM opportunities and must never be converted into synthetic deals —
+	// an empty pipeline must render as empty, not fabricated (data-truth
+	// remediation, FINDING-202).
+	const leadsList = crmData?.leads || [];
 
 	return (
 		<div className="flex flex-col gap-5 p-4 md:p-8 pt-4">
@@ -248,7 +231,7 @@ export default function Page() {
 							/>
 						</div>
 					) : (
-						<OpportunitiesSection data={data} />
+						<OpportunitiesSection leads={leadsList} />
 					)}
 
 					<TaskReminders data={data} />

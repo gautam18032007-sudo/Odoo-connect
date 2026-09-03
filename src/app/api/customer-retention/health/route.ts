@@ -9,6 +9,7 @@ import type { DashboardFilters } from "@/lib/founder/types";
 import {
 	getCustomerHealth,
 	getCustomerHealthList,
+	getMonthlyAovTrend,
 } from "@/lib/services/retention.service";
 
 export const runtime = "nodejs";
@@ -30,12 +31,14 @@ export async function GET(req: NextRequest) {
 
 		const health = await getCustomerHealth(sql, periods, filters);
 		const customerList = await getCustomerHealthList(sql, periods, filters);
+		const monthlyAovTrend = await getMonthlyAovTrend(sql, periods, filters);
 
 		return NextResponse.json({
 			success: true,
 			data: {
 				...health,
 				customerList,
+				monthlyAovTrend,
 			},
 		});
 	} catch (error) {

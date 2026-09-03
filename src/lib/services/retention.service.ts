@@ -651,3 +651,47 @@ export async function getCustomerHealthList(
 		};
 	});
 }
+
+/**
+ * Real monthly AOV trend across the selected date range (data-truth
+ * remediation, FINDING-201) — replaces a UI-side function that fabricated a
+ * fixed 6-month Jan-Jun series with a hardcoded multiplier curve. Grouped by
+ * calendar month within the filtered range, using the same
+ * SUM(net_amount)/COUNT(DISTINCT order_id) AOV definition used everywhere
+ * else in this codebase.
+ */
+export async function getMonthlyAovTrend(
+	db: FounderSql,
+	periods: ComparisonPeriods,
+	filters: DashboardFilters,
+): Promise<
+	Array<{ month: string; aov: number; revenue: number; orders: number }>
+> {
+	const food = retailFilter(filters);
+	const store = filters.store ?? null;
+
+	const rows = await (db as any).query(
+		`SELECT
+      to_char(date_trunc('month', sale_date), 'YYYY-MM') AS month,
+      SUM(net_amount)::numeric AS revenue,
+      COUNT(DISTINCT order_id)::integer AS orders
+    FROM sales_fact_v
+    WHERE sale_date >= $1::date AND sale_date <= $2::date
+      AND ($3::text IS NULL OR billed_by = $3)
+      AND ($4::text[] IS NULL OR category <> ALL($4::text[]))
+    GROUP BY date_trunc('month', sale_date)
+    ORDER BY date_trunc('month', sale_date) ASC`,
+		[periods.currentStart, periods.currentEnd, store, food],
+	);
+
+	return rows.map((row: any) => {
+		const revenue = n(row.revenue);
+		const orders = n(row.orders);
+		return {
+			month: row.month,
+			revenue: Math.round(revenue),
+			orders,
+			aov: orders > 0 ? Math.round(revenue / orders) : 0,
+		};
+	});
+}

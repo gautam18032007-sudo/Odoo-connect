@@ -1,18 +1,29 @@
-import path from "node:path";
-import { neon } from "@neondatabase/serverless";
+import * as path from "node:path";
 import * as dotenv from "dotenv";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
+/**
+ * RETIRED (DEFECT-111, Phase 2 remediation).
+ *
+ * This script directly mutated sales_fact.billed_by, unconditionally,
+ * with no guard. That approach is inconsistent with — and superseded by —
+ * this project's established store-identity architecture: store-name
+ * unification (e.g. "Klj store"/"KLJ" -> "KLJ") is handled entirely at the
+ * sales_fact_v VIEW level (see src/scripts/update-odoo-compatibility-view.ts),
+ * specifically so the underlying stored data in sales_fact never needs to
+ * be rewritten. Re-running this script would directly contradict that
+ * architecture and risk reintroducing raw-data drift the view-level fix
+ * was built to avoid.
+ *
+ * Zero references to this script exist anywhere else in the repository. It
+ * is retired rather than left runnable.
+ */
 async function main() {
-	const sql = neon(process.env.DATABASE_URL!);
-	await sql`UPDATE sales_fact SET billed_by = 'Klj store' WHERE billed_by IN ('KLJ', 'klj', 'Klj store')`;
-	await sql`UPDATE sales_fact SET billed_by = 'SmartworksNoida Noida' WHERE billed_by IN ('Smart_Works_Noida', 'SmartworksNoida Noida') OR billed_by ILIKE '%smart%' OR billed_by ILIKE '%noida%'`;
-	const counts =
-		await sql`SELECT billed_by, count(*)::int FROM sales_fact GROUP BY billed_by ORDER BY billed_by`;
-	console.log("Remapped billed_by:", counts);
-	const viewCounts = await sql`SELECT count(*)::int FROM sales_fact_v`;
-	console.log("sales_fact_v rows:", viewCounts[0]);
+	console.error(
+		"❌ This script is retired (DEFECT-111) and will not run. Store-name unification is handled at the sales_fact_v view level — see update-odoo-compatibility-view.ts. See this file's header for the full reasoning.",
+	);
+	process.exit(1);
 }
 
-main().catch(console.error);
+main();

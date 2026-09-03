@@ -1,51 +1,30 @@
 import * as path from "node:path";
-import { neon } from "@neondatabase/serverless";
 import * as dotenv from "dotenv";
 
 dotenv.config({ path: path.join(process.cwd(), ".env.local") });
 
-if (!process.env.DATABASE_URL) {
-	throw new Error("DATABASE_URL is not set");
-}
-
-const sql = neon(process.env.DATABASE_URL);
-
+/**
+ * RETIRED (new finding, Phase 2 destructive-script sweep — same class as
+ * DEFECT-111).
+ *
+ * Same problem as the already-retired remap-billed-by-ground-truth.ts:
+ * unconditional `UPDATE sales_fact SET billed_by = ...`, no guard, no
+ * confirmation, directly mutating raw stored data instead of using this
+ * project's established view-level store-identity unification (see
+ * update-odoo-compatibility-view.ts). Additionally, this script references
+ * a `store` column that does not exist on the current sales_fact schema
+ * (confirmed: sales_fact has no `store` column, only `billed_by`,
+ * `source_billed_by`, `store_id`) — it would error immediately if run
+ * against the current database, confirming it is a stale artifact from an
+ * earlier schema version, not a currently-usable tool.
+ *
+ * Zero references to this script exist anywhere else in the repository.
+ */
 async function main() {
-	console.log("Starting backfill for billed_by...");
-
-	const kljResult = await sql`
-    UPDATE sales_fact
-    SET billed_by = 'KLJ'
-    WHERE (billed_by IS NULL OR billed_by = '' OR billed_by NOT IN ('KLJ', 'Smart_Works_Noida'))
-      AND (store ILIKE '%klj%' OR store = 'KLJ')
-  `;
-	console.log(`Updated KLJ rows: ${kljResult.length ?? 0}`);
-
-	const smartResult = await sql`
-    UPDATE sales_fact
-    SET billed_by = 'Smart_Works_Noida'
-    WHERE (billed_by IS NULL OR billed_by = '' OR billed_by NOT IN ('KLJ', 'Smart_Works_Noida'))
-      AND (store ILIKE '%smart%' OR store ILIKE '%noida%')
-  `;
-	console.log(`Updated Smart_Works_Noida rows: ${smartResult.length ?? 0}`);
-
-	const fallbackResult = await sql`
-    UPDATE sales_fact
-    SET billed_by = 'KLJ'
-    WHERE billed_by IS NULL OR billed_by = ''
-  `;
-	console.log(`Updated fallback rows: ${fallbackResult.length ?? 0}`);
-
-	const counts = await sql`
-    SELECT billed_by, count(*)::int AS count
-    FROM sales_fact
-    GROUP BY billed_by
-    ORDER BY billed_by
-  `;
-	console.log("Current billed_by distribution:", counts);
+	console.error(
+		"❌ This script is retired and will not run. Store-name unification is handled at the sales_fact_v view level — see update-odoo-compatibility-view.ts. See this file's header for the full reasoning.",
+	);
+	process.exit(1);
 }
 
-main().catch((error) => {
-	console.error(error);
-	process.exit(1);
-});
+main();
