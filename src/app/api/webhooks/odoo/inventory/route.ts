@@ -6,6 +6,17 @@ const WEBHOOK_RATE_LIMIT_MAX_ATTEMPTS = 120;
 const WEBHOOK_RATE_LIMIT_WINDOW_SECONDS = 60;
 
 /**
+ * LEGACY — PENDING ODOO CONFIGURATION VERIFICATION.
+ *
+ * This route trusts the inbound webhook payload directly instead of
+ * re-reading the authoritative record from the Odoo API, and writes into
+ * inventory_snapshots/inventory_movements — separate tables from
+ * dim_products/fact_inventory used by the canonical sync path. It must NOT
+ * be treated as part of the canonical real-time architecture. Whether any
+ * Odoo automation still calls this route is unconfirmed as of the 2026-09
+ * real-time sync audit — do not retire it until that is verified, but do
+ * not extend or rely on it either.
+ *
  * POST /api/webhooks/odoo/inventory
  *
  * Receives stock level snapshots from Odoo Standard Plan via Make.com.

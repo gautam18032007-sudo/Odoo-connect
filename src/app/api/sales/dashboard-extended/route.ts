@@ -132,7 +132,11 @@ export async function GET(req: NextRequest) {
 					revenue: Number(row.revenue ?? 0),
 					orders: Number(row.orders ?? 0),
 					units: Number(row.units ?? 0),
-					profit: Math.round(Number(row.revenue ?? 0) * 0.26),
+					// No per-day profit field: real profit requires a per-day
+					// COGS join (see business-logic/margin.ts), not queried
+					// here. A prior version fabricated this as revenue * 0.26
+					// — removed rather than replaced with another guess. No
+					// current UI component consumes this field.
 				})),
 				recentOrders: recentOrdersResult.map((row: any) => ({
 					id: Number(row.id),

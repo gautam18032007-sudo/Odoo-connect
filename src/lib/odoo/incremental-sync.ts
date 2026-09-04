@@ -2,15 +2,47 @@ import { invalidateDashboardCache } from "../cache/revalidate";
 import { sql } from "../db";
 import {
 	type OdooCustomer,
+	type OdooInventory,
 	type OdooProduct,
 	type OdooSalesLine,
 	type OdooSalesOrder,
 	upsertCustomers,
+	upsertInventory,
 	upsertProducts,
 	upsertSalesLines,
 	upsertSalesOrders,
 } from "../repositories/odoo.repository";
+import {
+	getKnownLocationIds,
+	type OdooCategoryDimension,
+	type OdooPosConfigDimension,
+	upsertCategories,
+	upsertPosConfigs,
+} from "../repositories/odoo-dimensions.repository";
 import { OdooClient } from "./client";
+import { syncLocationDimension } from "./sync/syncDimensions";
+
+/**
+ * Models the canonical real-time webhook path (syncSingleRecord) actually
+ * knows how to process. The webhook route rejects anything outside this
+ * list before it is even enqueued into webhook_events — an unsupported
+ * model must never be silently accepted or written anywhere.
+ *
+ * Same business-final states the batch path (syncSales.ts) uses for
+ * pos.order — kept as one shared constant so the real-time and batch
+ * paths can never drift apart on what counts as a dashboard-valid sale.
+ */
+export const SUPPORTED_ODOO_MODELS = [
+	"pos.order",
+	"sale.order",
+	"res.partner",
+	"product.product",
+	"product.category",
+	"stock.quant",
+	"pos.config",
+] as const;
+
+export const POS_ORDER_FINAL_STATES = ["paid", "done", "invoiced"] as const;
 
 /**
  * Auto-recovers missing or archived products referenced in an order.
@@ -150,6 +182,26 @@ export async function syncSingleRecord(
 		}
 
 		const rec = orders[0];
+		const orderState = String(rec.state);
+
+		// Mirror the batch path's own business-final-state filter exactly
+		// (syncSales.ts) — a draft/cancelled order must never become a
+		// dashboard-valid sale via the real-time path when the batch path
+		// would never have admitted it either. This does not delete or
+		// alter any already-synced row; it only skips inserting/updating
+		// this one as if it were a final sale.
+		if (!(POS_ORDER_FINAL_STATES as readonly string[]).includes(orderState)) {
+			console.log(
+				`[incrementalSync] pos.order #${recordId} has state "${orderState}" (not in ${POS_ORDER_FINAL_STATES.join("/")}) — excluded, matching existing batch-path business rules.`,
+			);
+			return {
+				success: true,
+				model,
+				recordId,
+				message: `pos.order #${recordId} excluded (state="${orderState}" is not a final sale state)`,
+			};
+		}
+
 		const partnerId = Array.isArray(rec.partner_id)
 			? Number(rec.partner_id[0])
 			: null;
@@ -359,7 +411,7 @@ export async function syncSingleRecord(
 					"id",
 					"name",
 					"email",
-					"mobile",
+					"phone",
 					"city",
 					"customer_rank",
 					"active",
@@ -377,11 +429,15 @@ export async function syncSingleRecord(
 		}
 
 		const rec = partners[0];
+		// Matches syncCustomers.ts's field list exactly — this Odoo instance
+		// rejects "mobile" as an invalid res.partner field (confirmed via a
+		// live RPC error during the 2026-09 real-time sync implementation);
+		// "phone" is what the working batch path has always actually used.
 		const customer: OdooCustomer = {
 			id: Number(rec.id),
 			name: String(rec.name),
 			email: rec.email ? String(rec.email) : undefined,
-			mobile: rec.mobile ? String(rec.mobile) : undefined,
+			mobile: rec.phone ? String(rec.phone) : undefined,
 			city: rec.city ? String(rec.city) : undefined,
 			customerRank: rec.customer_rank ? Number(rec.customer_rank) : 0,
 			active: Boolean(rec.active !== false),
@@ -406,6 +462,205 @@ export async function syncSingleRecord(
 			model,
 			recordId,
 			message: `Synced product.product #${recordId}`,
+		};
+	}
+
+	if (model === "product.category") {
+		const categories = await odooClient.callKw<any[]>(
+			"product.category",
+			"search_read",
+			[],
+			{
+				domain: [["id", "=", recordId]],
+				fields: ["id", "name", "parent_id"],
+			},
+		);
+
+		if (!categories || categories.length === 0) {
+			return {
+				success: false,
+				model,
+				recordId,
+				message: `product.category #${recordId} not found`,
+			};
+		}
+
+		const rec = categories[0];
+		const category: OdooCategoryDimension = {
+			id: Number(rec.id),
+			rawName: String(rec.name),
+			parentCategoryId: Array.isArray(rec.parent_id)
+				? Number(rec.parent_id[0])
+				: null,
+		};
+
+		await upsertCategories([category]);
+		await invalidateDashboardCache({
+			tags: ["inventory", "sales", "dashboard"],
+		});
+		return {
+			success: true,
+			model,
+			recordId,
+			message: `Synced product.category #${recordId}`,
+		};
+	}
+
+	if (model === "stock.quant") {
+		const quants = await odooClient.callKw<any[]>(
+			"stock.quant",
+			"search_read",
+			[],
+			{
+				domain: [["id", "=", recordId]],
+				fields: ["product_id", "location_id", "quantity", "reserved_quantity"],
+			},
+		);
+
+		if (!quants || quants.length === 0) {
+			return {
+				success: false,
+				model,
+				recordId,
+				message: `stock.quant #${recordId} not found`,
+			};
+		}
+
+		const rec = quants[0];
+		const productId = Array.isArray(rec.product_id)
+			? Number(rec.product_id[0])
+			: null;
+		const locationId = Array.isArray(rec.location_id)
+			? Number(rec.location_id[0])
+			: null;
+		const locationName = Array.isArray(rec.location_id)
+			? String(rec.location_id[1])
+			: undefined;
+
+		if (!productId || !locationId) {
+			return {
+				success: true,
+				model,
+				recordId,
+				message: `stock.quant #${recordId} has no resolvable product/location — skipped`,
+			};
+		}
+
+		// Same authoritative-state semantics as the batch path (syncInventory.ts):
+		// stock.quant.quantity is already Odoo's current absolute stock level,
+		// never a delta — re-reading and upserting it is correct, not a blind
+		// increment. Same fail-safe location resolution as the batch path: a
+		// location Odoo has just introduced may not be in dim_locations yet, so
+		// attempt one dimension refresh before skipping (never fabricating).
+		let knownLocationIds = await getKnownLocationIds();
+		if (!knownLocationIds.has(locationId)) {
+			try {
+				await syncLocationDimension(odooClient);
+				knownLocationIds = await getKnownLocationIds();
+			} catch (refreshErr: any) {
+				console.warn(
+					"[incrementalSync] Location dimension refresh failed (non-fatal):",
+					refreshErr.message,
+				);
+			}
+		}
+		if (!knownLocationIds.has(locationId)) {
+			return {
+				success: true,
+				model,
+				recordId,
+				message: `stock.quant #${recordId} references unresolved location_id ${locationId} (${locationName ?? "unknown"}) — skipped (fail-safe, not fabricated)`,
+			};
+		}
+
+		const inventoryRecord: OdooInventory = {
+			productId,
+			locationId,
+			locationName,
+			quantity: Number(rec.quantity || 0),
+			reservedQuantity: Number(rec.reserved_quantity || 0),
+		};
+
+		const result = await upsertInventory([inventoryRecord]);
+		await invalidateDashboardCache({ tags: ["inventory"] });
+		return {
+			success: true,
+			model,
+			recordId,
+			message:
+				result.inserted > 0
+					? `Synced stock.quant #${recordId}`
+					: `stock.quant #${recordId} skipped (product not yet in dim_products, fail-safe)`,
+		};
+	}
+
+	if (model === "pos.config") {
+		const configs = await odooClient.callKw<any[]>(
+			"pos.config",
+			"search_read",
+			[],
+			{
+				domain: [["id", "=", recordId]],
+				fields: [
+					"id",
+					"name",
+					"company_id",
+					"warehouse_id",
+					"picking_type_id",
+					"active",
+				],
+			},
+		);
+
+		if (!configs || configs.length === 0) {
+			return {
+				success: false,
+				model,
+				recordId,
+				message: `pos.config #${recordId} not found`,
+			};
+		}
+
+		const rec = configs[0];
+		const warehouseId = Array.isArray(rec.warehouse_id)
+			? Number(rec.warehouse_id[0])
+			: null;
+
+		// Store identity comes entirely from Odoo's own IDs/metadata — no
+		// store-name special-casing here, matching the dynamic pos.config
+		// discovery already used by the batch dimension sync.
+		let warehouseCode: string | null = null;
+		if (warehouseId) {
+			const warehouses = await odooClient.callKw<any[]>(
+				"stock.warehouse",
+				"search_read",
+				[],
+				{ domain: [["id", "=", warehouseId]], fields: ["id", "code"] },
+			);
+			warehouseCode = warehouses?.[0]?.code ? String(warehouses[0].code) : null;
+		}
+
+		const posConfig: OdooPosConfigDimension = {
+			id: Number(rec.id),
+			name: String(rec.name),
+			companyId: Array.isArray(rec.company_id)
+				? Number(rec.company_id[0])
+				: null,
+			warehouseId,
+			warehouseCode,
+			pickingTypeId: Array.isArray(rec.picking_type_id)
+				? Number(rec.picking_type_id[0])
+				: null,
+			active: rec.active !== false,
+		};
+
+		await upsertPosConfigs([posConfig]);
+		await invalidateDashboardCache({ tags: ["store", "dashboard"] });
+		return {
+			success: true,
+			model,
+			recordId,
+			message: `Synced pos.config #${recordId}`,
 		};
 	}
 

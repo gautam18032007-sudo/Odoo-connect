@@ -1,4 +1,5 @@
 import { after, type NextRequest, NextResponse } from "next/server";
+import { SUPPORTED_ODOO_MODELS } from "@/lib/odoo/incremental-sync";
 import {
 	enqueueWebhookEvent,
 	processWebhookEvent,
@@ -34,6 +35,17 @@ export async function POST(req: NextRequest) {
 	if (!body.id || !body.model) {
 		return NextResponse.json(
 			{ error: "Missing required fields: id and model" },
+			{ status: 400 },
+		);
+	}
+
+	// Reject unknown models outright — never enqueue or write anything for a
+	// model syncSingleRecord() cannot process. This must stay in sync with
+	// SUPPORTED_ODOO_MODELS in incremental-sync.ts (single source of truth).
+	if (!(SUPPORTED_ODOO_MODELS as readonly string[]).includes(body.model)) {
+		console.warn(`[webhook/odoo] Rejected unsupported model: ${body.model}`);
+		return NextResponse.json(
+			{ error: `Unsupported model: ${body.model}` },
 			{ status: 400 },
 		);
 	}

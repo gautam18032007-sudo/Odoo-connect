@@ -23,8 +23,14 @@ export async function GET(_req: NextRequest) {
 		// rather than fabricated. Both consumers already treat a missing
 		// field as "no signal" (undefined-checked), not as zero.
 		const businessHealth = calculateBusinessHealth({
-			revenueGrowthPercent: commercial.forecast.growthTrendPercent,
-			closedWonRate: crm.summary.winRate,
+			// forecast.growthTrendPercent is `number | null` (null = not enough
+			// historical data) — convert to undefined so calculateBusinessHealth's
+			// `!== undefined` check correctly excludes it rather than treating
+			// `null` as a defined value.
+			revenueGrowthPercent: commercial.forecast.growthTrendPercent ?? undefined,
+			// crm.summary.winRate is `number | null` (null = no real CRM leads
+			// yet) — convert to undefined for the same reason as above.
+			closedWonRate: crm.summary.winRate ?? undefined,
 		});
 
 		const hotLeads = crm.leads.filter((l: any) => l.leadBadge === "Hot").length;

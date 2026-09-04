@@ -301,6 +301,8 @@ export async function getAiInsights(
 	filters: DashboardFilters,
 ) {
 	const overview = await getRetentionOverview(db, periods, filters);
+	// Null (not a fabricated 61%) when totalRevenue is 0 — there is no
+	// meaningful "returning customer revenue share" to report in that case.
 	const returningRevShare =
 		overview.meta.totalRevenue > 0
 			? Math.round(
@@ -311,7 +313,7 @@ export async function getAiInsights(
 						overview.meta.totalRevenue) *
 						100,
 				)
-			: 61; // fallback standard share
+			: null;
 
 	const changePct = overview.repeatPurchaseRate.growth ?? 0;
 	const rateStr =
@@ -319,14 +321,24 @@ export async function getAiInsights(
 			? `improved ${changePct}%`
 			: `declined ${Math.abs(changePct)}%`;
 
-	return [
+	const insights = [
 		`Retention ${rateStr} vs last month`,
-		"Customers acquired in March show highest repeat purchases",
 		overview.hasMarketingSpendData
 			? `LTV:CAC currently ${overview.ltvCacRatio.current}x - ${(overview.ltvCacRatio.current ?? 0) >= 3 ? "Healthy growth benchmark exceeded" : "Consider acquisition optimizations"}`
 			: "LTV:CAC unavailable — no marketing spend data recorded",
-		`Returning customers contribute ${Math.min(100, Math.max(0, returningRevShare))}% revenue`,
 	];
+
+	// A prior version always appended a static, fabricated cohort insight
+	// ("Customers acquired in March show highest repeat purchases") — removed
+	// rather than replaced with another guess; no cohort-comparison query
+	// backs a genuine version of this sentence here.
+	if (returningRevShare !== null) {
+		insights.push(
+			`Returning customers contribute ${Math.min(100, Math.max(0, returningRevShare))}% revenue`,
+		);
+	}
+
+	return insights;
 }
 
 export async function getCustomerSegments(

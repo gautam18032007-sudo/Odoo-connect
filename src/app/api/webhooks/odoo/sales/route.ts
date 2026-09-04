@@ -6,6 +6,20 @@ const WEBHOOK_RATE_LIMIT_MAX_ATTEMPTS = 120;
 const WEBHOOK_RATE_LIMIT_WINDOW_SECONDS = 60;
 
 /**
+ * LEGACY — PENDING ODOO CONFIGURATION VERIFICATION.
+ *
+ * This route trusts the inbound webhook payload directly instead of
+ * re-reading the authoritative record from the Odoo API, and writes into
+ * `sales_fact` (the Excel-ingestion table), bypassing the
+ * staging/validate/commit pipeline the rest of this codebase requires for
+ * that table. It must NOT be treated as part of the canonical real-time
+ * architecture (see /api/webhooks/odoo instead, which does re-read
+ * authoritatively and writes into fact_sales_orders/fact_sales_lines).
+ *
+ * Whether any Odoo automation/Make.com/Zapier scenario still calls this
+ * route is unconfirmed as of the 2026-09 real-time sync audit — do not
+ * retire it until that is verified, but do not extend or rely on it either.
+ *
  * POST /api/webhooks/odoo/sales
  *
  * Receives real-time sales order payloads pushed by Odoo Standard Plan

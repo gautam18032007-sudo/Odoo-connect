@@ -10,6 +10,7 @@ import {
 	shouldRunHistoricalReconciliation,
 	syncSales,
 } from "@/lib/odoo/sync/syncSales";
+import { retryFailedWebhookEvents } from "@/lib/odoo/webhook-handler";
 import {
 	getLastSyncTime,
 	getWorkerHeartbeat,
@@ -325,6 +326,48 @@ export async function GET(req: NextRequest) {
 			await logSyncTelemetry(
 				"inventory",
 				inventoryStart,
+				new Date().toISOString(),
+				"failed",
+				0,
+				err?.message ?? null,
+				0,
+				0,
+				"active",
+				{ traceId, workerId: "vercel_cron" },
+			);
+		}
+
+		// Real-time webhook retry sweep (safety net only — see
+		// retryFailedWebhookEvents()'s own doc comment for why nothing else
+		// re-invokes a failed event). This is reconciliation, not the primary
+		// freshness path: the primary path is the webhook route itself, which
+		// processes successful events immediately with no cron involvement.
+		const retryStart = new Date().toISOString();
+		try {
+			const { attempted, succeeded } = await retryFailedWebhookEvents();
+			if (attempted > 0) {
+				totalRecords += succeeded;
+				await logSyncTelemetry(
+					"webhook_retry",
+					retryStart,
+					new Date().toISOString(),
+					"success",
+					succeeded,
+					null,
+					0,
+					0,
+					"active",
+					{ traceId, workerId: "vercel_cron" },
+				);
+			}
+		} catch (err: any) {
+			console.error(
+				"[ODOO_CRON] Webhook retry sweep error (non-fatal):",
+				err?.message,
+			);
+			await logSyncTelemetry(
+				"webhook_retry",
+				retryStart,
 				new Date().toISOString(),
 				"failed",
 				0,

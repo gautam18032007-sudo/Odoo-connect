@@ -1,4 +1,5 @@
 import { generateRecommendations } from "@/lib/ai/recommendation-engine";
+import { sql } from "@/lib/db";
 import { generateSalesForecast } from "@/lib/intelligence/forecast/sales";
 import { calculateAOV } from "@/lib/metrics/engine";
 import {
@@ -7,18 +8,30 @@ import {
 } from "../repositories/commercial.repository";
 
 export async function getCommercialIntelligence() {
-	const [stores, brands] = await Promise.all([
+	const [stores, brands, dailyRevenueRows] = await Promise.all([
 		getStoreScorecards(),
 		getCommercialBrandBreakdown(),
+		sql`
+			SELECT sale_date::text AS date, COALESCE(SUM(net_amount), 0)::float AS revenue
+			FROM sales_fact_v
+			WHERE sale_date >= CURRENT_DATE - INTERVAL '90 days'
+			GROUP BY sale_date
+			ORDER BY sale_date ASC
+		`,
 	]);
 
 	const totalRevenue = stores.reduce((sum, s) => sum + s.grossRevenue, 0);
 	const totalOrders = stores.reduce((sum, s) => sum + s.orderCount, 0);
 	const overallAov = calculateAOV(totalRevenue, totalOrders);
 
-	const forecast = generateSalesForecast([
-		{ date: new Date().toISOString(), revenue: totalRevenue / 30 },
-	]);
+	// Real historical daily revenue (up to 90 days) — not a single synthetic
+	// averaged point — so the forecast engine can compute a genuine trend.
+	const forecast = generateSalesForecast(
+		dailyRevenueRows.map((r) => ({
+			date: String(r.date),
+			revenue: Number(r.revenue),
+		})),
+	);
 
 	// No repeat-purchase-rate figure is currently wired into this
 	// intelligence layer (a real one exists in retention.service.ts, but

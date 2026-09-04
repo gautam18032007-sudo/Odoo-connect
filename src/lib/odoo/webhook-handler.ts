@@ -147,3 +147,43 @@ export async function processWebhookEvent(eventId: string): Promise<void> {
 		`;
 	}
 }
+
+const MAX_WEBHOOK_RETRIES = 3;
+
+/**
+ * Safety-net sweep for events that reached 'failed' status.
+ *
+ * enqueueWebhookEvent() deliberately treats any redelivery of the same
+ * event_id as a duplicate (correct — Odoo may retry its own delivery, and
+ * that must not double-process a record). The side effect is that nothing
+ * else re-invokes processWebhookEvent() for an event once it has failed —
+ * redelivery of the identical event_id is swallowed as "already seen", not
+ * retried. This closes that gap the same way the cron backup sync already
+ * closes the AlwaysOnSyncWorker's gap: a secondary, throttled safety net,
+ * not the primary path. Only events below MAX_WEBHOOK_RETRIES are retried;
+ * processWebhookEvent() itself is what marks an event 'dead_letter' once it
+ * reaches that count, so this function never loops a dead event forever.
+ */
+export async function retryFailedWebhookEvents(): Promise<{
+	attempted: number;
+	succeeded: number;
+}> {
+	const rows = await sql`
+		SELECT event_id FROM webhook_events
+		WHERE status = 'failed' AND retry_count < ${MAX_WEBHOOK_RETRIES}
+		ORDER BY received_at ASC
+		LIMIT 50
+	`;
+
+	let succeeded = 0;
+	for (const row of rows) {
+		const eventId = String(row.event_id);
+		await processWebhookEvent(eventId);
+		const [after] = await sql`
+			SELECT status FROM webhook_events WHERE event_id = ${eventId}
+		`;
+		if (after?.status === "processed") succeeded++;
+	}
+
+	return { attempted: rows.length, succeeded };
+}

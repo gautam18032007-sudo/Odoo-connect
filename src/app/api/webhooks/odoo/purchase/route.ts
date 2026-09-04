@@ -6,6 +6,17 @@ const WEBHOOK_RATE_LIMIT_MAX_ATTEMPTS = 120;
 const WEBHOOK_RATE_LIMIT_WINDOW_SECONDS = 60;
 
 /**
+ * LEGACY — PENDING ODOO CONFIGURATION VERIFICATION.
+ *
+ * This route trusts the inbound webhook payload directly instead of
+ * re-reading the authoritative purchase.order record from the Odoo API. No
+ * canonical purchase.order sync/mapping exists anywhere in this codebase
+ * yet (confirmed via repo-wide search during the 2026-09 real-time sync
+ * audit), so this route cannot currently be upgraded to the re-read pattern
+ * without building that mapping first. Whether any Odoo automation still
+ * calls this route is unconfirmed — do not retire it until that is
+ * verified, but do not extend or rely on it either.
+ *
  * POST /api/webhooks/odoo/purchase
  *
  * Receives Purchase Order payloads from Odoo Standard Plan via Make.com.

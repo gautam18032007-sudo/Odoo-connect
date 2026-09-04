@@ -160,12 +160,12 @@ export function PipelineKanbanBoard({
 												<Badge
 													variant="outline"
 													className={`text-[10px] px-1.5 py-0 ${
-														lead.store === "KLJ"
-															? "border-blue-500/30 text-blue-600 dark:text-blue-400"
-															: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+														lead.store
+															? "border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+															: "border-muted-foreground/30 text-muted-foreground"
 													}`}
 												>
-													{lead.store || "KLJ"}
+													{lead.store || "Unknown"}
 												</Badge>
 											</div>
 

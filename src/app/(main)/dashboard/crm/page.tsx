@@ -214,8 +214,8 @@ export default function Page() {
 				</div>
 			) : (
 				<div className="flex flex-col gap-6">
-					<KpiCards data={data} />
-					<PipelineActivity data={data} />
+					<KpiCards summary={crmData?.summary} />
+					<PipelineActivity summary={crmData?.summary} />
 
 					{viewMode === "kanban" ? (
 						<div className="flex flex-col gap-3">
@@ -234,7 +234,7 @@ export default function Page() {
 						<OpportunitiesSection leads={leadsList} />
 					)}
 
-					<TaskReminders data={data} />
+					<TaskReminders />
 				</div>
 			)}
 		</div>

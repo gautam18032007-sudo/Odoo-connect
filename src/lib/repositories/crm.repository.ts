@@ -28,7 +28,9 @@ export interface CrmPipelineSummary {
 	totalPipelineValue: number;
 	totalLeads: number;
 	avgDealSize: number;
-	winRate: number;
+	/** Null when totalLeads is 0 — "no CRM data" is not the same as "0%
+	 * win rate" and must never be conflated. */
+	winRate: number | null;
 	stageCounts: Record<string, { count: number; value: number }>;
 }
 
@@ -63,8 +65,8 @@ export async function getCrmLeads(filters?: {
 				medium,
 				active,
 				won,
-				COALESCE(store, 'KLJ') AS store,
-				COALESCE(health, 'On Track') AS health,
+				store,
+				health,
 				notes,
 				created_at AS "createdAt",
 				updated_at AS "updatedAt"
@@ -126,12 +128,15 @@ export async function getCrmPipelineSummary(): Promise<CrmPipelineSummary> {
 			avgDealSize: 0,
 			winRate: 0,
 		};
+		const totalLeads = Number(stat.totalLeads);
 
 		return {
 			totalPipelineValue: Number(stat.totalPipelineValue),
-			totalLeads: Number(stat.totalLeads),
+			totalLeads,
 			avgDealSize: Number(stat.avgDealSize),
-			winRate: Number(stat.winRate),
+			// 0 leads means "no CRM data", not a real 0% win rate — never
+			// conflate the two.
+			winRate: totalLeads > 0 ? Number(stat.winRate) : null,
 			stageCounts,
 		};
 	} catch (err) {
@@ -140,7 +145,7 @@ export async function getCrmPipelineSummary(): Promise<CrmPipelineSummary> {
 			totalPipelineValue: 0,
 			totalLeads: 0,
 			avgDealSize: 0,
-			winRate: 0,
+			winRate: null,
 			stageCounts: {},
 		};
 	}
@@ -179,7 +184,7 @@ export async function createCrmLead(data: {
 				${data.stage || "Qualified"},
 				${data.expectedRevenue || 0},
 				${data.probability || 20},
-				${data.store || "KLJ"},
+				${data.store || null},
 				${data.salesperson || "Unassigned"},
 				${data.notes || null}
 			)
@@ -200,8 +205,8 @@ export async function createCrmLead(data: {
 				medium,
 				active,
 				won,
-				COALESCE(store, 'KLJ') AS store,
-				COALESCE(health, 'On Track') AS health,
+				store,
+				health,
 				notes;
 		`;
 		return rows[0] as CrmLead;
